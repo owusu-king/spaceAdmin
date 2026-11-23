@@ -1,0 +1,236 @@
+{
+  "split": {
+    "train": 15684,
+    "val": 3362,
+    "test": 3362
+  },
+  "seed": 42,
+  "config": {
+    "seed": 42,
+    "val_size": 0.15,
+    "test_size": 0.15,
+    "hidden": [
+      128,
+      64
+    ],
+    "dropout": 0.25,
+    "lr": 0.002,
+    "weight_decay": 0.0001,
+    "batch_size": 256,
+    "max_epochs": 60,
+    "patience": 8,
+    "min_category_count": 5,
+    "cv_folds": 5
+  },
+  "variants": [
+    {
+      "variant": "full",
+      "label": "Original design: embeddings + class weights",
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "val_macro_f1": 0.7417,
+      "val_std": 0.0042,
+      "macro_f1": 0.7295,
+      "test_std": 0.0052,
+      "accuracy": 0.8938,
+      "epochs": 30.0,
+      "parameters": 23454,
+      "seconds": 33.0,
+      "hidden": [
+        128,
+        64
+      ],
+      "delta_val": 0.0,
+      "delta_macro_f1": 0.0
+    },
+    {
+      "variant": "one_hot",
+      "label": "One-hot instead of embeddings",
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "val_macro_f1": 0.7549,
+      "val_std": 0.0024,
+      "macro_f1": 0.7489,
+      "test_std": 0.007,
+      "accuracy": 0.9007,
+      "epochs": 39.3,
+      "parameters": 49484,
+      "seconds": 40.6,
+      "hidden": [
+        128,
+        64
+      ],
+      "delta_val": 0.0132,
+      "delta_macro_f1": 0.0194
+    },
+    {
+      "variant": "no_class_weights",
+      "label": "Without class weighting",
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "val_macro_f1": 0.755,
+      "val_std": 0.0032,
+      "macro_f1": 0.7431,
+      "test_std": 0.0058,
+      "accuracy": 0.9058,
+      "epochs": 41.0,
+      "parameters": 23454,
+      "seconds": 44.0,
+      "hidden": [
+        128,
+        64
+      ],
+      "delta_val": 0.0133,
+      "delta_macro_f1": 0.0136
+    },
+    {
+      "variant": "one_hot_no_class_weights",
+      "label": "One-hot and no class weighting (selected, deployed)",
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "val_macro_f1": 0.7605,
+      "val_std": 0.0036,
+      "macro_f1": 0.7467,
+      "test_std": 0.0039,
+      "accuracy": 0.9066,
+      "epochs": 27.7,
+      "parameters": 49484,
+      "seconds": 36.1,
+      "hidden": [
+        128,
+        64
+      ],
+      "delta_val": 0.0188,
+      "delta_macro_f1": 0.0172
+    },
+    {
+      "variant": "no_occupants",
+      "label": "Without occupant features",
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "val_macro_f1": 0.7413,
+      "val_std": 0.0023,
+      "macro_f1": 0.7143,
+      "test_std": 0.0054,
+      "accuracy": 0.8898,
+      "epochs": 47.3,
+      "parameters": 22558,
+      "seconds": 50.0,
+      "hidden": [
+        128,
+        64
+      ],
+      "delta_val": -0.0004,
+      "delta_macro_f1": -0.0152
+    },
+    {
+      "variant": "no_room_id",
+      "label": "Without room-number features",
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "val_macro_f1": 0.714,
+      "val_std": 0.0062,
+      "macro_f1": 0.7057,
+      "test_std": 0.0054,
+      "accuracy": 0.8812,
+      "epochs": 28.3,
+      "parameters": 19516,
+      "seconds": 28.3,
+      "hidden": [
+        128,
+        64
+      ],
+      "delta_val": -0.0277,
+      "delta_macro_f1": -0.0238
+    },
+    {
+      "variant": "no_allocation",
+      "label": "Without departmental allocation",
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "val_macro_f1": 0.6348,
+      "val_std": 0.0016,
+      "macro_f1": 0.6393,
+      "test_std": 0.0084,
+      "accuracy": 0.8147,
+      "epochs": 34.7,
+      "parameters": 19374,
+      "seconds": 37.4,
+      "hidden": [
+        128,
+        64
+      ],
+      "delta_val": -0.1069,
+      "delta_macro_f1": -0.0902
+    },
+    {
+      "variant": "shallow",
+      "label": "One hidden layer (64)",
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "val_macro_f1": 0.7446,
+      "val_std": 0.0025,
+      "macro_f1": 0.7378,
+      "test_std": 0.0048,
+      "accuracy": 0.8972,
+      "epochs": 44.3,
+      "parameters": 10142,
+      "seconds": 38.4,
+      "hidden": [
+        64
+      ],
+      "delta_val": 0.0029,
+      "delta_macro_f1": 0.0083
+    },
+    {
+      "variant": "deeper",
+      "label": "Three hidden layers (256-128-64)",
+      "seeds": [
+        42,
+        43,
+        44
+      ],
+      "val_macro_f1": 0.7462,
+      "val_std": 0.0009,
+      "macro_f1": 0.7338,
+      "test_std": 0.0082,
+      "accuracy": 0.8944,
+      "epochs": 37.3,
+      "parameters": 66462,
+      "seconds": 51.1,
+      "hidden": [
+        256,
+        128,
+        64
+      ],
+      "delta_val": 0.0045,
+      "delta_macro_f1": 0.0043
+    }
+  ],
+  "selected_by_validation": "one_hot_no_class_weights",
+  "selection_rule": "highest mean validation macro-F1 across seeds; test scores are reported, never used to select"
+}

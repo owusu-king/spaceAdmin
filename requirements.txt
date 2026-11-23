@@ -1,0 +1,25 @@
+# Install PyTorch (CPU build) first, see README:
+#   pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu
+torch==2.15.0
+numpy==2.5.5
+pandas==3.1.1
+openpyxl==3.1.5
+scikit-learn==1.9.1
+striprtf==0.0.35
+python-dotenv==1.2.4
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.4
+matplotlib==3.11.2
+# tests and notebooks
+pytest==9.2.0
+httpx==0.28.1
+nbformat==5.11.1
+nbclient==0.11.0
+nbconvert==7.17.2
+ipykernel==7.4.0
+# voice assistant (all local; models download separately, see README "Voice assistant")
+langgraph==1.2.24
+onnxruntime==1.32.0
+onnx-asr[cpu,hub]==0.12.0
+kokoro-onnx==0.4.7

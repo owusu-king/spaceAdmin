@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "facilities-ai",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "app.api:app", "--port", "8000"],
+      "port": 8000
+    },
+    {
+      "name": "facilities-ai-test",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": ["/c", "set FAI_DB_PATH=data\\test-facilities.db&& .venv\\Scripts\\python.exe -m uvicorn app.api:app --port 8010"],
+      "port": 8010
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+# generated at runtime
+data/dataset_cache.pkl
+data/facilities.db
+models/notebook_run/
+# institutional source data and personnel records: do not publish
+datares/
+data/events.db
+# secrets and local variables: never publish
+.env
+!.env.example
+# local voice models (large binaries; download with the README voice setup)
+models/voice/
+data/test-facilities.db
