@@ -39,10 +39,10 @@ LAB_UNRECORDED = ["ventilation and air-change rate", "laboratory utilities (gase
 class SpaceAdministratorAgent(Agent):
     name = "space_admin"
     objectives = [
-        "Identify candidate spaces that fit a documented need (function, area, seats, department).",
-        "Distinguish recorded vacancy from actual availability and flag planning reservations.",
-        "Use the space-function model to flag records whose recorded class may not reflect actual use.",
-        "Prepare verification questions and the approval path; never assign or book space.",
+        "Find spaces that fit a need.",
+        "Separate recorded vacancy from availability.",
+        "Flag rooms whose use may differ from the record.",
+        "Prepare questions and approvals; never assign.",
     ]
     permissions = {"resolve_building", "get_department", "get_person", "find_person", "measure_proximity", "search_spaces", "get_space_details",
                    "get_space_occupancy", "check_planning_reservations", "get_floor_plan",
@@ -308,7 +308,7 @@ class SpaceAdministratorAgent(Agent):
             # Without the reference office a proximity ranking would be meaningless: ask first.
             findings.append(Evidence(f"Reference person '{req.near}' not resolved; ranking deferred", "unknown", "people_records"))
             report = self._report(req, requirements, [], [], findings, questions, None)
-            report["summary"] = "Ranking deferred: the reference person must be identified first (see questions)."
+            report["summary"] = "Ranking deferred: which person is meant?"
             return report
         if req.department:
             dr = self.call("get_department", name=req.department)
@@ -393,19 +393,19 @@ class SpaceAdministratorAgent(Agent):
         failed, unknown = r["constraints"]["failed"], list(r["constraints"]["unknown"])
         conditions = []
         if row.plan_reservation:
-            conditions.append("Planning reservation: space is earmarked for an upcoming change")
+            conditions.append("Planning reservation")
         if req.department and (pd.isna(row.allocation) or req.department not in str(row.allocation)):
-            conditions.append("Allocated to another unit or not on record: reallocation approval needed"
-                              if pd.notna(row.allocation) else "Departmental allocation not on record")
+            conditions.append("Allocated to another unit: needs reallocation approval"
+                              if pd.notna(row.allocation) else "Allocation not on record")
         if m.get("verify_flag"):
-            conditions.append(f"Model infers {m['predicted_group']} use ({m['confidence']:.0%}); verify actual use")
+            conditions.append(f"Model sees {m['predicted_group']} ({m['confidence']:.0%}): verify use")
         if req.function in ("Research Lab", "Teaching Lab"):
             unknown += [f"{x.capitalize()} not on record" for x in LAB_UNRECORDED]
         if req.function not in WORKPOINT_FUNCTIONS and row.occ_total == 0:
-            unknown.append("Current use not on record (not a workpoint in the seating data)")
+            unknown.append("Current use not on record")
         notes = []
         if row.seat_status == "Vacant":
-            notes.append("Recorded vacant. This does not authorize assignment; verify actual use with the department")
+            notes.append("Recorded vacant: does not authorize assignment")
         if failed:
             status = "incompatible"
         elif r["coverage"] < AGENTS.coverage_threshold:
@@ -472,29 +472,27 @@ class SpaceAdministratorAgent(Agent):
         questions.append("Which vacancies has the department confirmed in use review?")
         report = self._report(req, requirements, [], [], findings, questions, None)
         report["vacancies"] = rows
-        report["summary"] = (f"{len(rows)} recorded vacancies for review, {sum(1 for r in rows if r['flags'])} carry flags. "
-                             "Recorded vacancy is a candidate for review, not permission to reassign.")
+        report["summary"] = f"{len(rows)} recorded vacancies, {sum(1 for r in rows if r['flags'])} flagged."
         return report
 
     def _report(self, req, requirements, candidates, alternatives, findings, questions, person, pool_size=0) -> dict:
-        approvals = ["Affected department (actual use and needs)", "School leadership"]
+        approvals = ["Department", "School leadership"]
         if any(c.get("allocation") and req.department and req.department not in c["allocation"] for c in candidates):
             approvals.append("Space Management (allocation change)")
         if req.function in ("Research Lab", "Teaching Lab"):
-            approvals += ["Facilities / project staff (technical review)", "Environmental Health & Safety"]
+            approvals += ["Facilities (technical review)", "Environmental Health & Safety"]
             questions.append("What equipment, utilities and safety needs must the lab meet?")
         if any(c["status"] == "conditional" or c.get("notes") for c in candidates):
             questions.append("Can the department confirm current use of the top rooms?")
         implications = []
         if person and person.get("rooms"):
-            implications.append(f"Current recorded location(s) {', '.join(person['rooms'])} would need review after the change")
+            implications.append(f"Review current room(s) {', '.join(person['rooms'])} after the change")
         if req.request_type == "temporary_relocation":
-            implications.append("Temporary use only: original allocation remains; confirm duration and return date")
+            implications.append("Temporary use: confirm duration and return date")
         n_ok = sum(c["status"] == "potentially_suitable" for c in candidates)
         n_cond = sum(c["status"] == "conditional" for c in candidates)
-        summary = (f"{len(candidates)} candidates ranked from {pool_size} compatible records: "
-                   f"{n_ok} potentially suitable, {n_cond} conditional." if candidates else
-                   "No candidate ranked. See missing information.")
+        summary = (f"{len(candidates)} candidates: {n_ok} suitable, {n_cond} conditional." if candidates else
+                   "No candidates yet.")
         self.log.info(f"workflow done candidates={len(candidates)} suitable={n_ok} conditional={n_cond} questions={len(questions)}")
         return {"case_type": "space_assignment", "agent": self.name, "request": req.model_dump(),
                 "requirements": requirements, "summary": summary, "candidates": candidates,

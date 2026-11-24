@@ -49,6 +49,7 @@ const P = {
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   send: '<path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/>', stop: '<rect x="7.5" y="7.5" width="9" height="9" rx="1.5"/>',
   micOff: '<path d="M3 3l18 18"/><path d="M9 9v2a3 3 0 0 0 5.1 2.1M15 10V6a3 3 0 0 0-5.7-1.3"/><path d="M5 11a7 7 0 0 0 11.5 5.3M19 11a7 7 0 0 1-.6 2.8M12 18v3M9 21h6"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/>',
   check: '<path d="M20 6 9 17l-5-5"/>', confirmed: '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
   recorded: '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/>', inferred: '<path d="M12 3 21 12 12 21 3 12z"/>',
@@ -97,12 +98,26 @@ export const empty = (text, action = "") => `<div class="empty">
 export const errorBanner = (err, retry = "") => `<div class="banner error">${icon("attention")}<div><b>Could not load.</b> ${esc(err.message || err)}
   <div class="mono muted" style="margin-top:4px">ref ${Date.now().toString(36)}</div></div>${retry}</div>`;
 
-export function toast(msg) {
-  const t = document.createElement("div");
-  t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => t.remove(), 4000);
+/** One toast at a time, top right: a new message replaces the one showing (no stacked or overlapping toasts). */
+let toastEl = null, toastTimer = 0;
+export function toast(msg, ms = 4000) {
+  if (!toastEl || !toastEl.isConnected) {
+    toastEl = document.createElement("div");
+    toastEl.className = "toast"; toastEl.setAttribute("role", "status"); toastEl.setAttribute("aria-live", "polite");
+    document.body.appendChild(toastEl);
+  } else {                                                 // replay the entrance so the change is noticed
+    toastEl.style.animation = "none"; void toastEl.offsetWidth; toastEl.style.animation = "";
+  }
+  toastEl.textContent = msg;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl && toastEl.remove(); toastEl = null; }, ms);
 }
+
+/** Cases this page created or opened. The live "new case" notice is only for cases that arrive on their own
+ *  (outage email), never for one James just made. */
+const knownCases = new Set();
+export function noteCases(...ids) { ids.flat().forEach(id => id && knownCases.add(id)); }
+export const isKnownCase = id => knownCases.has(id);
 
 // ---------------------------------------------------------------- drawer / modal
 /** dismissible: false keeps the dialog open on backdrop clicks and Escape; only [data-close] elements close it

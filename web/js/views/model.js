@@ -3,7 +3,7 @@ import { setCrumbs } from "../app.js";
 
 export async function render(main) {
   setCrumbs([{ label: "Model" }]);
-  main.innerHTML = `<div class="page-head"><div><h1>Model</h1><p>SpaceFunctionNet · infers a room's function from its profile</p></div></div><div id="body">${skeleton(8)}</div>`;
+  main.innerHTML = `<div class="page-head"><div><h1>Model</h1><p>Predicts a room's function</p></div></div><div id="body">${skeleton(8)}</div>`;
   let d, abl;
   try { [d, abl] = await Promise.all([api("/model"), api("/ablation")]); } catch (e) { main.querySelector("#body").innerHTML = errorBanner(e); return; }
   const m = d.metrics, t = m.test, b = m.baselines;
@@ -11,9 +11,9 @@ export async function render(main) {
   const ours = t.macro_f1;
   main.querySelector("#body").innerHTML = `
     <div class="kpis" style="grid-template-columns:repeat(3,1fr)">
-      ${fig("Macro-F1", ours.toFixed(3), "Test split · all categories equal")}
+      ${fig("Macro-F1", ours.toFixed(3), "Test split")}
       ${fig("Accuracy", t.accuracy.toFixed(3), `${fmtNum(t.n)} test records`)}
-      ${fig("Unseen buildings", m.building_holdout.macro_f1.toFixed(3), "Macro-F1 · buildings held out")}
+      ${fig("Unseen buildings", m.building_holdout.macro_f1.toFixed(3), "Macro-F1")}
     </div>
     <div class="chart-grid g3">
       ${card("Loss", `<span class="legend"><span><i style="background:var(--series-1)"></i>Train</span><span><i style="background:var(--series-2)"></i>Val</span></span>`, "c-loss")}
@@ -52,18 +52,18 @@ export async function render(main) {
     { label: 130, bar: 6, gap: 4, rowH: 20 });
   heatmap(main.querySelector("#c-cm"), t.confusion, m.classes, { cell: 22, left: 118, bottom: 92 });
   const open = {
-    ablation: () => modal({ overline: "Model", title: "Ablation study", size: "lg", meta: "One change per variant · 3 seeds · chosen on validation", body: ablationTable(abl) }),
-    flags: () => modal({ overline: "Model", title: "Records to verify", meta: "Strongest disagreements with the recorded class", size: "lg",
+    ablation: () => modal({ title: "Ablation study", size: "lg", meta: "3 seeds · chosen on validation", body: ablationTable(abl) }),
+    flags: () => modal({ title: "Records to verify", meta: "Strongest disagreements", size: "lg",
       body: `<table class="t plain"><thead><tr><th>Space</th><th>Recorded</th><th>Model</th><th class="r">Confidence</th></tr></thead><tbody>
         ${d.flagged_examples.map(f => `<tr><td>${roomKey(f.space_id)}</td><td>${esc(f.recorded)}</td><td>${chip("inferred", f.predicted)}</td><td class="r mono">${f.confidence.toFixed(2)}</td></tr>`).join("")}</tbody></table>`,
       footer: `<a class="btn" href="#/spaces?view=flagged" data-close>Open in Spaces</a><button class="btn" data-close>Close</button>` }),
-    design: () => modal({ overline: "Model", title: "Design", body: `<dl class="kv">
+    design: () => modal({ title: "Design", body: `<dl class="kv">
         <dt>Inputs</dt><dd>${m.features.categorical.length} categorical (${m.config.use_embeddings === false ? "one-hot" : "embeddings"}) · ${m.features.numeric.length} numeric</dd>
         <dt>Network</dt><dd>${m.config.hidden.join(" → ")} · BatchNorm · ReLU · dropout ${m.config.dropout} → ${m.classes.length} classes</dd>
         <dt>Training</dt><dd>${m.config.class_weighting === false ? "Cross-entropy" : "Weighted cross-entropy"} · AdamW · lr ${m.config.lr}</dd>
         <dt>Data split</dt><dd>${fmtNum(m.split.train)} / ${fmtNum(m.split.val)} / ${fmtNum(m.split.test)} · seed ${m.config.seed}</dd>
-        <dt>Leakage</dt><dd>Label-derived fields excluded · encoder fit on training only · agents read out-of-fold predictions</dd>
-        <dt>Used by</dt><dd>Space agent (verify actual use) · Outage agent (lab-like rooms)</dd></dl>` }),
+        <dt>Leakage</dt><dd>Label fields excluded · out-of-fold predictions</dd>
+        <dt>Used by</dt><dd>Space agent · Outage agent</dd></dl>` }),
   };
   main.querySelectorAll("[data-row]").forEach(b2 => b2.onclick = () => open[b2.dataset.row]());
 }
@@ -76,6 +76,5 @@ function ablationTable(a) {
   return `<table class="t plain"><thead><tr><th>Variant</th><th class="r">Validation</th><th class="r">Test</th><th class="r">Parameters</th></tr></thead><tbody>
     ${rows.map(r => `<tr ${r.variant === a.selected_by_validation ? 'class="sel"' : ""}><td>${esc(r.label.replace(" (selected, deployed)", ""))}${r.variant === a.selected_by_validation ? " " + chip("confirmed", "Deployed") : ""}</td>
       <td class="r mono">${r.val_macro_f1.toFixed(3)} <span class="muted">±${r.val_std.toFixed(3)}</span></td>
-      <td class="r mono">${r.macro_f1.toFixed(3)}</td><td class="r">${fmtNum(r.parameters)}</td></tr>`).join("")}</tbody></table>
-    <p class="muted" style="font-size:13px;margin:12px 0 0">Data matters most: departmental allocation is worth about 0.1 macro-F1. Test scores are reported, never used to choose.</p>`;
+      <td class="r mono">${r.macro_f1.toFixed(3)}</td><td class="r">${fmtNum(r.parameters)}</td></tr>`).join("")}</tbody></table>`;
 }

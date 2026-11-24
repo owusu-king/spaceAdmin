@@ -20,6 +20,7 @@ class VoiceService:
         self._conv = None
         self._lock = threading.Lock()
         self._ready_cache: tuple[float, tuple[bool, str]] | None = None
+        self._warm_at, self._warming = -1e9, False
 
     # ------------------------------------------------------------------------------ options
     def options(self) -> dict:
@@ -84,29 +85,34 @@ class VoiceService:
                 self._conv = SpaceConversation(self.coord)
             return self._conv
 
-    def prewarm(self) -> None:
-        """Load the chosen models in the background so the first conversation starts quickly."""
+    def prewarm(self, force: bool = False) -> None:
+        """Load the chosen models in the background so conversations start quickly. Cheap to call often:
+        it does nothing if a warm-up ran in the last 20 minutes (the language model stays loaded for 2 hours)."""
+        with self._lock:
+            if self._warming or (not force and time.monotonic() - self._warm_at < 20 * 60):
+                return
+            self._warming = True
+
         def run():
             try:
                 sel = self.selection()
-                engines.Transcriber(sel["voice_stt"]); engines.Speaker(sel["voice_voice"])
+                engines.Transcriber(sel["voice_stt"]); engines.Speaker(sel["voice_voice"]); engines.SpeechDetector()
                 llm = OllamaChat(sel["voice_llm"])
                 llm.warm()
-                self.conversation().warm(llm)            # first schema-bound call is slow; do it now
+                self.conversation().warm(llm)            # the first schema-bound call is slow; do it now
+                self._warm_at = time.monotonic()
                 log.info("voice models preloaded")
             except Exception as exc:
                 log.warning(f"voice preload skipped error={exc!r}")
+            finally:
+                self._warming = False
         threading.Thread(target=run, daemon=True, name="voice-prewarm").start()
 
     def build_session(self, save_case):
-        """Load the chosen engines (first time takes a few seconds) and return a VoiceSession."""
+        """Return a VoiceSession straight away. Speech engines are cached after the first load; the language model is
+        warmed in the background (while James starts talking) instead of making him wait."""
         from app.voice.session import VoiceSession
         sel = self.selection()
-        llm = OllamaChat(sel["voice_llm"])
-        llm.warm()
-        try:
-            self.conversation().warm(llm)
-        except Exception as exc:
-            log.warning(f"conversation warm-up failed error={exc!r}")
-        return VoiceSession(self.conversation(), llm, engines.Transcriber(sel["voice_stt"]),
+        self.prewarm()
+        return VoiceSession(self.conversation(), OllamaChat(sel["voice_llm"]), engines.Transcriber(sel["voice_stt"]),
                             engines.Speaker(sel["voice_voice"]), engines.SpeechDetector(), save_case)

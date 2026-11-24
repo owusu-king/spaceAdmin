@@ -40,7 +40,7 @@ class Switch:
 
 SWITCHES: list[Switch] = [
     # Short on purpose: the Settings page shows one line per switch; the reason a switch is unavailable is the tooltip.
-    Switch("voice_assistant", "Voice assistant", "Talk to the Space agent in a new space request. Runs on this computer.",
+    Switch("voice_assistant", "Voice assistant", "Talk to the Space agent. Runs locally.",
            "Voice", "The local models chosen below", needs_unlock=False),
     Switch("send_email", "Send email", "Send approved drafts from a case.", "Actions",
            "Outgoing mail settings (FAI_SMTP_*) in .env"),
@@ -86,6 +86,11 @@ class SettingsStore:
             if not ok:
                 return False, why
         return True, ""
+
+    def switched_on(self, key: str) -> bool:
+        """The switch position alone (no readiness checks): fast, for deciding what to show."""
+        r = self._row(key)
+        return bool(r and r["value"] and not (r["expires"] and datetime.fromisoformat(r["expires"]) <= datetime.now()))
 
     def is_on(self, key: str) -> bool:
         r = self._row(key)

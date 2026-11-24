@@ -109,9 +109,15 @@ class EventStore:
 
     def add(self, title: str, start: datetime, end: datetime, building: str | None = None, kind: str = "event",
             source: str = "manual", note: str = "", all_day: bool = False) -> dict:
+        """Add an event. The same event twice (same title, time, building, kind and source, e.g. a double click or
+        importing one calendar file again) is kept once: the existing event comes back with duplicate=True."""
         if end <= start:
             raise ValueError("Event end must be after its start")
         with self._lock:
+            same = self.db.execute("SELECT id FROM events WHERE title=? AND start=? AND end=? AND building IS ? AND kind=? AND source=?",
+                                   (title[:200], start.isoformat(), end.isoformat(), building, kind, source)).fetchone()
+            if same:
+                return {**self.get(same[0]), "duplicate": True}
             cur = self.db.execute("INSERT INTO events (title, start, end, building, kind, source, note, all_day, created) "
                                   "VALUES (?,?,?,?,?,?,?,?,?)", (title[:200], start.isoformat(), end.isoformat(), building,
                                                                  kind, source, note[:500], int(all_day),
@@ -147,15 +153,19 @@ class EventStore:
         return {r[0]: r[1] for r in self.db.execute("SELECT source, COUNT(*) FROM events GROUP BY source").fetchall()}
 
     # ---------------------------------------------------------------- importers
-    def import_ics(self, text: str, resolver) -> int:
-        n = 0
+    def import_ics(self, text: str, resolver) -> dict:
+        """Import a calendar file; events already on the calendar are skipped, so importing again is safe."""
+        n = skipped = 0
         for e in parse_ics(text):
             hits = [m for m in resolver.find_in_text(e["location"] + " " + e["title"]) if m.status == "resolved"]
             note = f"Location: {e['location']}" if e["location"] else "No location given; treated as campus-wide"
-            self.add(e["title"], e["start"], e["end"], hits[0].export_name if hits else None, "event", "ics", note, e["all_day"])
-            n += 1
-        log.info(f"ics imported events={n}")
-        return n
+            ev = self.add(e["title"], e["start"], e["end"], hits[0].export_name if hits else None, "event", "ics", note, e["all_day"])
+            if ev.get("duplicate"):
+                skipped += 1
+            else:
+                n += 1
+        log.info(f"ics imported events={n} already_present={skipped}")
+        return {"imported": n, "skipped": skipped}
 
     def seed_from_corpus(self, corpus, resolver) -> int:
         """Dated building activities from the correspondence (subjects, plus academic dates in bodies)."""

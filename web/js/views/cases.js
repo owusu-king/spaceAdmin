@@ -13,14 +13,14 @@ const OPEN = ["ReadyForReview", "NeedsRevision"];
 
 async function list(main) {
   setCrumbs([{ label: "Cases" }]);
-  main.innerHTML = `<div class="page-head"><div><h1>Cases</h1><p>Agent analyses for your review</p></div>
+  main.innerHTML = `<div class="page-head"><div><h1>Cases</h1><p>For your review</p></div>
     <div class="actions"><button class="btn" id="ns">${icon("plus")}Space request</button><button class="btn primary" id="no">${icon("plus")}Outage notice</button></div></div>
     <div id="body">${skeleton(5)}</div>`;
   main.querySelector("#ns").onclick = () => newSpaceRequest();
   main.querySelector("#no").onclick = () => newOutageCase();
   let rows;
   try { rows = await api("/cases"); } catch (e) { main.querySelector("#body").innerHTML = errorBanner(e); return; }
-  if (!rows.length) { main.querySelector("#body").innerHTML = `<div class="panel">${empty("No cases yet. Each request or notice an agent analyzes becomes a case.")}</div>`; return; }
+  if (!rows.length) { main.querySelector("#body").innerHTML = `<div class="panel">${empty("No cases yet.")}</div>`; return; }
   const groups = { open: rows.filter(c => OPEN.includes(c.status)), closed: rows.filter(c => !OPEN.includes(c.status)), all: rows };
   const labels = { open: "To review", closed: "Decided", all: "All" };
   const item = c => `<button class="cl-row" data-case="${esc(c.id)}">
@@ -71,7 +71,8 @@ function header(c) {
     ? `<button class="btn ghost sm" id="rerun">${icon("refresh")}Re-run</button>
        <button class="btn sm danger" id="return">Return / Decline</button>
        <button class="btn sm primary" id="approve">Approve Rev ${esc(c.rev_letter)}</button>`
-    : c.status === "NeedsRevision" ? `<button class="btn sm primary" id="rerun">${icon("refresh")}Re-run analysis</button>` : "";
+    : c.status === "NeedsRevision" ? `<button class="btn sm primary" id="rerun">${icon("refresh")}Re-run</button>` : "";
+  const del = `<button class="btn ghost sm case-del" id="delete" title="Delete" aria-label="Delete case">${icon("trash")}</button>`;
   return `<header class="case-head">
     <div class="case-id">
       <div class="overline">${c.kind === "space" ? "Space request" : "Outage"}</div>
@@ -82,7 +83,7 @@ function header(c) {
         ${c.reviews.length ? `<button class="linkish" id="history">History (${c.reviews.length})</button>` : ""}</div>
     </div>
     <div class="case-side">
-      <div class="case-actions">${actions}</div>
+      <div class="case-actions">${actions}${del}</div>
     </div>
   </header>`;
 }
@@ -117,7 +118,7 @@ const qItem = q => `<li>${icon("unknown")}<span class="grow">${esc(q)}</span><bu
 // ------------------------------------------------------------------ outage case
 function outageCase(o, caseId) {
   const out = o.outage, s = o.scheduling, imp = o.impacts;
-  const when = out.date_only ? `${fmtDate(out.proposed_start)} <span class="muted">· time not stated</span>`
+  const when = out.date_only ? `${fmtDate(out.proposed_start)} <span class="muted">· time TBC</span>`
     : out.proposed_start ? fmtWindow(out.proposed_start, out.proposed_end) : notOnRecord("Not stated");
   const verdict = !s.window ? chip("unknown", "No date") : s.verdict === "conflict"
     ? chip("conflicting", `Conflict · ${s.conflicts.length}`) : chip("confirmed", "No known conflict");
@@ -137,33 +138,33 @@ function outageCase(o, caseId) {
       ${fact("Request", `${out.request_reference ? `<span class="mono">${esc(out.request_reference)}</span>` : "Email"}${out.priority ? ` <span class="muted">· ${esc(out.priority)}</span>` : ""}`)}
     </div>
     ${attention(att)}
-    ${people ? section("people", "Affected people", `${people.natural_sciences} in Natural Sciences · ${people.total} in all departments`, affectedPeople(people, caseId)) : ""}
+    ${people ? section("people", "Affected people", `${people.natural_sciences} in Natural Sciences · ${people.total} total`, affectedPeople(people, caseId)) : ""}
     ${section("drafts", "Drafts", draftsMeta(o.communication_drafts.length), drafts(o.communication_drafts, caseId), "md")}
-    ${notifyCard(o, people, nsDepts)}
-    ${section("details", "Notice", "Reason, scope, approvals", outageDetails(o))}
+    ${notifyCard(o, people)}
+    ${section("details", "Notice", "Reason and scope", outageDetails(o))}
     ${section("schedule", "Schedule", scheduleMeta(s), `<div data-buildings="${esc(JSON.stringify(out.buildings.map(b => b.export_name)))}" data-sr="${esc(out.request_reference || "")}">${scheduling(s, o)}</div>`)}
     ${section("impact", "Impact", impactMeta(imp), impactBody(imp))}
-    ${section("contacts", "Departments", `${nsDepts} Natural Sciences · ${contacts} contact${contacts === 1 ? "" : "s"}`, stakeholders(o.stakeholders))}
+    ${section("contacts", "Departments", `${nsDepts} department${nsDepts === 1 ? "" : "s"} · ${contacts} contact${contacts === 1 ? "" : "s"}`, stakeholders(o.stakeholders))}
     ${qs.length ? section("questions", "Questions", `${qs.length} open`, `<ul class="qlist">${qs.map(qItem).join("")}</ul>`) : ""}
     ${o.space_support ? section("space", "Temporary space", `${o.space_support.reply.payload.candidates?.length || 0} options`, support(o.space_support)) : ""}
     ${section("activity", "Evidence", `${o.findings.length} findings · ${o.trace.length} tool calls`, evidenceActivity(o))}
     ${detailsCard(["details", "schedule", "impact", "contacts", "questions", "space", "activity"])}`;
 }
 
-/** "2 prepared · not sent" or "2 prepared · 1 sent" (current revision only). */
+/** "2 drafts · not sent" or "2 drafts · 1 sent" (current revision only). */
 function draftsMeta(n) {
   const sent = (SEND.sent || []).filter(x => x.rev === SEND.rev).length;
-  return `${n} draft${n === 1 ? "" : "s"} prepared · ${sent ? `${sent} sent` : "not sent"}`;
+  return `${n} draft${n === 1 ? "" : "s"} · ${sent ? `${sent} sent` : "not sent"}`;
 }
 
 /** Primary block of an outage case: who is affected and the messages prepared for them. */
-function notifyCard(o, people, nsDepts) {
+function notifyCard(o, people) {
   const n = o.communication_drafts.length;
   return `<section class="primary-card">
     <div class="pc-main">
       <div class="overline">Notify affected people</div>
-      <div class="pc-fig">${people ? `${fmtNum(people.natural_sciences)} <span>people in Natural Sciences</span>` : `<span>${notOnRecord("No people on record")}</span>`}</div>
-      <div class="pc-sub">${people ? `${fmtNum(people.total)} in all departments · ` : ""}${nsDepts} department${nsDepts === 1 ? "" : "s"} · ${draftsMeta(n)}</div>
+      <div class="pc-fig">${people ? `${fmtNum(people.natural_sciences)} <span>people in Natural Sciences</span>` : `<span>${notOnRecord("None on record")}</span>`}</div>
+      <div class="pc-sub">${people ? `${fmtNum(people.total)} in all departments · ` : ""}${draftsMeta(n)}</div>
     </div>
     <div class="pc-actions">
       ${people ? `<button class="btn" data-sec="people">View people</button>` : ""}
@@ -175,7 +176,7 @@ function notifyCard(o, people, nsDepts) {
 function scheduleMeta(s) {
   if (!s.window) return "No date yet";
   const v = s.verdict === "conflict" ? `${s.conflicts.length} conflict${s.conflicts.length === 1 ? "" : "s"}` : "No known conflict";
-  return s.alternatives?.length ? `${v} · ${s.alternatives.length} other times` : v;
+  return s.alternatives?.length ? `${v} · ${s.alternatives.length} alternatives` : v;
 }
 
 function impactMeta(imp) {
@@ -200,7 +201,7 @@ function outageDetails(o) {
   return `<dl class="kv">
       <dt>Buildings</dt><dd>${out.buildings.map(b => esc(b.name)).join("<br>") || notOnRecord()}</dd>
       <dt>Reason</dt><dd>${val(out.reason)}</dd>
-      <dt>Scope of work</dt><dd>${val(out.scope_of_work)}</dd>
+      <dt>Scope</dt><dd>${val(out.scope_of_work)}</dd>
       <dt>Approvals</dt><dd>${o.required_approvals.map(esc).join("<br>")}</dd>
       ${o.maintenance_forecast.length ? `<dt>Recurring</dt><dd>${o.maintenance_forecast.map(f => `${esc(f.systems.join(", "))} around ${fmtDate(f.estimated_next)} ${chip("predicted")}`).join("<br>")}</dd>` : ""}
       ${o.related_outages.similar.length ? `<dt>Similar</dt><dd>${o.related_outages.similar.slice(-3).map(h => `<span class="mono">${esc(h.sr)}</span> · ${fmtDate(h.start)}`).join("<br>")}</dd>` : ""}
@@ -227,7 +228,7 @@ function spaceCase(o) {
     ${o.vacancies ? `<div class="block">${vacancyTable(o.vacancies)}</div>` : `<div class="block">${candidateTable(cands)}</div>`}
     ${o.alternative_spaces?.length ? section("alt", "More candidates", `${o.alternative_spaces.length} more`, `<ul class="list">${o.alternative_spaces.map(a => `<li><span class="grow mono">${esc(a.space_id)}</span>${chip(a.status)}</li>`).join("")}</ul>`) : ""}
       ${qs.length ? section("questions", "Questions", `${qs.length} open`, `<ul class="qlist">${qs.map(qItem).join("")}</ul>`) : ""}
-      ${section("requirements", "Requirements", `${o.requirements.length} requirements · ${o.required_approvals.length} approvals`,
+      ${section("requirements", "Requirements", `${o.requirements.length} items`,
         `<dl class="kv">${o.requirements.map(r => `<dt>${esc(r.field)}</dt><dd>${esc(r.value)} <span class="tag">${esc(r.source)}</span></dd>`).join("")}
          <dt>Approvals</dt><dd>${o.required_approvals.map(esc).join("<br>")}</dd>
          ${o.implications?.length ? `<dt>Implications</dt><dd>${o.implications.map(esc).join("<br>")}</dd>` : ""}</dl>`)}
@@ -236,7 +237,7 @@ function spaceCase(o) {
 }
 
 function candidateTable(cands) {
-  if (!cands.length) return `<div class="panel">${empty("No candidates yet. Answer the question above first.")}</div>`;
+  if (!cands.length) return `<div class="panel">${empty("No candidates yet.")}</div>`;
   const hasProx = cands.some(c => c.proximity);
   return `<div class="table-wrap"><table class="t cand"><thead><tr><th>#</th><th>Space</th>${hasProx ? "<th>Distance</th>" : ""}<th class="r">Area</th><th>Type</th><th>Status</th><th class="r">Score</th></tr></thead><tbody>
     ${cands.map((c, i) => `<tr class="click" data-cand="${i}" tabindex="0"><td class="mono muted">${i + 1}</td><td>${roomKey(c.room_key)}</td>
@@ -257,7 +258,7 @@ function candidateDetail(c) {
     <div><div class="overline">Score</div>${Object.entries(c.criteria).map(([k, v]) =>
       `<div class="gauge" style="grid-template-columns:84px 1fr;margin-top:6px"><span>${labels[k] || k}</span>${miniBar(v)}</div>`).join("")}
       <div class="muted" style="font-size:12px;margin-top:8px">Evidence coverage ${pct(c.evidence_coverage)}</div></div>
-    <div><div class="overline">Check before assigning</div><ul class="list">${issues.map(([ch, t]) => `<li>${ch}<span class="grow">${esc(t)}</span></li>`).join("") || "<li class='muted'>Nothing flagged</li>"}</ul></div>
+    <div><div class="overline">To check</div><ul class="list">${issues.map(([ch, t]) => `<li>${ch}<span class="grow">${esc(t)}</span></li>`).join("") || "<li class='muted'>Nothing flagged</li>"}</ul></div>
     <div><div class="overline">Record</div><dl class="kv" style="grid-template-columns:84px 1fr;margin-top:6px">
       <dt>Seating</dt><dd>${esc(c.seat_status === "Not Available for Seating" ? "Not a workpoint" : c.seat_status)}</dd>
       <dt>Allocation</dt><dd>${val(c.allocation)}</dd><dt>Standard</dt><dd>${val(c.space_standard)}</dd>
@@ -285,7 +286,7 @@ function evidenceActivity(o) {
     <div><div class="overline">Tool calls</div><ol class="steps" style="margin-top:6px">${o.trace.map(t => `<li><span class="mono muted">${t.step}</span>
       <span class="mono" style="font-size:12px" title="${esc([...t.warnings, ...t.missing_information].join("; "))}">${esc(t.tool_name)}</span>
       <span class="st ${esc(t.status)}">${esc(t.status)}</span><span class="mono muted" style="font-size:11px">${t.duration_ms} ms</span></li>`).join("")}</ol>
-      ${(o.messages || []).length ? `<div class="overline" style="margin-top:16px">Agent messages</div><ul class="list">${o.messages.map(m => `<li class="mono" style="font-size:12px">${esc(m.sender)} → ${esc(m.recipient)} · ${esc(m.intent)}</li>`).join("")}</ul>` : ""}</div>
+      ${(o.messages || []).length ? `<div class="overline" style="margin-top:16px">Messages</div><ul class="list">${o.messages.map(m => `<li class="mono" style="font-size:12px">${esc(m.sender)} → ${esc(m.recipient)} · ${esc(m.intent)}</li>`).join("")}</ul>` : ""}</div>
   </div>`;
 }
 
@@ -302,12 +303,12 @@ function timeline(nodes) {
 }
 
 function stakeholders(s) {
-  if (!s.departments.length) return `<p class="muted">No Natural Sciences departments in scope.</p>`;
+  if (!s.departments.length) return `<p class="muted">No departments in scope.</p>`;
   return `<table class="t plain"><thead><tr><th>Department</th><th>Contacts</th><th class="r">People</th></tr></thead><tbody>
     ${s.departments.map(d => `<tr><td>${esc(d.department)}</td>
       <td>${d.coordination_contacts.length ? d.coordination_contacts.map(c => `<div title="${esc(c.basis)}">${esc(c.name)} <span class="mono muted" style="font-size:12px">${esc(c.email)}</span></div>`).join("") : chip("unknown", "None")}</td>
       <td class="r">${d.notification_recipients.count}</td></tr>`).join("")}
-    </tbody></table><p class="muted" style="font-size:12px;margin:10px 0 0">Formal approvers are in TRIRIGA, not in these records.</p>`;
+    </tbody></table>`;
 }
 
 const SOURCE_LABEL = { correspondence: "Email", ics: "Calendar", manual: "Manual", blocked: "Blocked", "TRIRIGA notices": "Outage" };
@@ -348,7 +349,7 @@ function scheduling(s, o) {
     </div>
     <div id="pt-result" style="margin-top:10px"></div>
     <div class="coverage">${s.coverage.map(c => `<span title="${esc(c.period)}" class="cov ${c.status === "covered" ? "ok" : "gap"}">${esc(c.source.replace(/ \(.*\)/, ""))}</span>`).join("")}
-      ${!o.space_support ? `<button class="linkish" id="ask-temp" style="margin-left:auto">Find temporary space</button>` : ""}</div>`;
+      ${!o.space_support ? `<button class="linkish" id="ask-temp" style="margin-left:auto">Temporary space</button>` : ""}</div>`;
 }
 
 function support(s) {
@@ -363,11 +364,11 @@ function affectedPeople(a, caseId) {
   const shown = ns.slice(0, 20);
   const csv = scope => `/api/v1/cases/${encodeURIComponent(caseId)}/recipients.csv?scope=${scope}`;
   return `<div class="row-between"><span class="muted" style="font-size:12px">${esc(a.scope_rule)}</span>
-      <span style="display:flex;gap:8px"><a class="btn sm" href="${csv("natural_sciences")}">${icon("file")}Natural Sciences CSV</a><a class="btn ghost sm" href="${csv("all")}">All CSV</a></span></div>
+      <span style="display:flex;gap:8px"><a class="btn sm" href="${csv("natural_sciences")}">${icon("file")}Natural Sciences</a><a class="btn ghost sm" href="${csv("all")}">All</a></span></div>
     ${ns.length ? `<table class="t plain" style="margin-top:12px"><thead><tr><th>Name</th><th>Email</th><th>Department</th><th>Room</th></tr></thead><tbody>
       ${shown.map(p => `<tr title="${esc(p.reason)}"><td>${esc(p.name)}</td><td class="mono" style="font-size:12px">${esc(p.email)}</td><td>${esc(p.department)}</td><td class="mono" style="font-size:12px">${esc(p.room.split(" · ").slice(1).join(" · "))}</td></tr>`).join("")}
-      </tbody></table>${ns.length > shown.length ? `<p class="muted" style="font-size:12px;margin:8px 0 0">+${ns.length - shown.length} more in the CSV</p>` : ""}`
-      : `<p class="muted" style="margin:12px 0 0">No Natural Sciences people recorded in the affected spaces.</p>`}`;
+      </tbody></table>${ns.length > shown.length ? `<p class="muted" style="font-size:12px;margin:8px 0 0">+${ns.length - shown.length} more</p>` : ""}`
+      : `<p class="muted" style="margin:12px 0 0">No one recorded.</p>`}`;
 }
 
 function drafts(list, caseId) {
@@ -376,7 +377,7 @@ function drafts(list, caseId) {
     ${list.map((d, i) => `<div class="draft" data-draft-p="${i}" ${i ? "hidden" : ""}>
       <div class="draft-to">${d.kind === "notification"
         ? `To ${d.recipients.affected_people} people · <a href="/api/v1/cases/${encodeURIComponent(caseId)}/recipients.csv?scope=natural_sciences">list</a>`
-        : `To ${d.recipients.coordination_contacts.length ? d.recipients.coordination_contacts.map(x => esc(x.split(" <")[0])).join(", ") : "contacts to confirm"}`}
+        : `To ${d.recipients.coordination_contacts.length ? d.recipients.coordination_contacts.map(x => esc(x.split(" <")[0])).join(", ") : "contacts TBC"}`}
         <span class="tag" style="margin-left:auto">Draft</span></div>
       <pre>${esc(d.body)}</pre>
       <div class="bar-actions"><button class="btn sm" data-copy="${esc(d.body)}">${icon("copy")}Copy</button>
@@ -387,8 +388,8 @@ function drafts(list, caseId) {
 function sendControl(d) {
   const done = SEND.sent.find(x => x.draft === d.kind && x.rev === SEND.rev);
   if (done) return `<span class="draft-sent">${icon("check")}Sent ${fmtDate(done.ts, true)}${done.redirected ? " · test address" : ""}</span>`;
-  if (!SEND.enabled) return `<button class="btn sm locked" data-locked="send_email" title="Sending is switched off. Turn on 'Send email' in Settings, or send from your own mailbox.">${icon("lock")}Send</button>`;
-  if (!SEND.approved) return `<button class="btn sm" disabled title="Approve Rev ${esc(SEND.revLetter)} before sending">Send</button>`;
+  if (!SEND.enabled) return `<button class="btn sm locked" data-locked="send_email" title="Turn on Send email in Settings">${icon("lock")}Send</button>`;
+  if (!SEND.approved) return `<button class="btn sm" disabled title="Approve Rev ${esc(SEND.revLetter)} first">Send</button>`;
   return `<button class="btn sm primary" data-send="${esc(d.kind)}">Send…</button>`;
 }
 
@@ -397,19 +398,18 @@ function confirmSend(c, d, main, closeParent) {
     ? `${d.recipients.affected_people} affected people (BCC)`
     : `${d.recipients.coordination_contacts.length} department contact${d.recipients.coordination_contacts.length === 1 ? "" : "s"}`;
   const where = SEND.live
-    ? `<div class="banner error">${icon("attention")}<div><b>Real recipients.</b> This goes to ${esc(to)}.</div></div>`
-    : `<div class="banner info">${icon("shield")}<div><b>Test mode.</b> Goes only to <span class="mono">${esc(SEND.redirect_to || "the test address")}</span>, with the ${esc(to)} listed inside.</div></div>`;
+    ? `<div class="banner error">${icon("attention")}<div><b>Real recipients:</b> ${esc(to)}.</div></div>`
+    : `<div class="banner info">${icon("shield")}<div><b>Test mode:</b> to <span class="mono">${esc(SEND.redirect_to || "the test address")}</span> only.</div></div>`;
   const subject = (d.body.split("\n")[0] || "").replace(/^Subject:\s*/i, "");
   const m = modal({ overline: `${esc(c.id)} · Rev ${esc(c.rev_letter)}`, title: "Send this draft?",
-    body: `${where}<dl class="kv" style="margin-top:16px"><dt>Subject</dt><dd>${esc(subject)}</dd><dt>Draft</dt><dd>${esc(d.title)}</dd></dl>
-      <p class="muted" style="font-size:12px;margin:14px 0 0">Sent once per revision and recorded in the activity log.</p>`,
+    body: `${where}<dl class="kv" style="margin-top:16px"><dt>Subject</dt><dd>${esc(subject)}</dd><dt>Draft</dt><dd>${esc(d.title)}</dd></dl>`,
     footer: `<button class="btn" data-close>Cancel</button><button class="btn primary" id="snd-ok">Send now</button>` });
   m.el.querySelector("#snd-ok").onclick = async e => {
     e.target.disabled = true;
     try {
       const r = await api(`/cases/${encodeURIComponent(c.id)}/send`, { method: "POST", body: { draft: d.kind, rev: c.rev, confirm: true } });
       m.close(); closeParent && closeParent();
-      toast(r.redirected ? "Sent to the test address" : `Sent to ${r.intended} recipient(s)`);
+      toast(r.redirected ? "Sent to test address" : `Sent to ${r.intended}`);
       workspace(main, c.id);
     } catch (err) { toast(err.message); e.target.disabled = false; }
   };
@@ -419,25 +419,30 @@ function confirmSend(c, d, main, closeParent) {
 function openReturn(c, main) {
   const d = modal({ overline: `${esc(c.id)} · Rev ${esc(c.rev_letter)}`, title: "Return or decline",
     body: `<div class="field"><label for="rat">Reason</label><textarea class="input" id="rat" rows="4" style="font-family:var(--sans);font-size:14px"></textarea></div><div id="rev-err" style="margin-top:10px"></div>`,
-    footer: `<button class="btn" data-close>Cancel</button><button class="btn danger" data-dec="decline">Decline</button><button class="btn primary" data-dec="return">Return for revision</button>` });
+    footer: `<button class="btn" data-close>Cancel</button><button class="btn danger" data-dec="decline">Decline</button><button class="btn primary" data-dec="return">Return</button>` });
   d.el.querySelector("#rat").focus();
-  d.el.querySelectorAll("[data-dec]").forEach(b => b.onclick = async () => {
+  const decs = [...d.el.querySelectorAll("[data-dec]")];
+  decs.forEach(b => b.onclick = async () => {
+    decs.forEach(x => x.disabled = true);                   // one decision per click
     try {
       await api(`/cases/${c.id}/review`, { method: "POST", body: { decision: b.dataset.dec, rationale: d.el.querySelector("#rat").value, rev: c.rev } });
-      d.close(); toast("Review recorded"); refreshCounts(); workspace(main, c.id);
-    } catch (e) { d.el.querySelector("#rev-err").innerHTML = `<div class="banner error">${icon("attention")}<div>${esc(e.message)}</div></div>`; }
+      d.close(); toast(b.dataset.dec === "decline" ? `${c.id} declined` : `Rev ${c.rev_letter} returned`); refreshCounts(); workspace(main, c.id);
+    } catch (e) {
+      d.el.querySelector("#rev-err").innerHTML = `<div class="banner error">${icon("attention")}<div>${esc(e.message)}</div></div>`;
+      decs.forEach(x => x.disabled = false);
+    }
   });
 }
 
 function openTimeline(c) {
   const o = c.output, aside = o.incident?.set_aside;
   modal({ overline: esc(c.id), title: "Timeline", size: "md",
-    meta: `${o.timeline.length} message${o.timeline.length === 1 ? "" : "s"} in this incident${aside ? ` · ${aside} unrelated set aside` : ""}`,
+    meta: `${o.timeline.length} message${o.timeline.length === 1 ? "" : "s"}${aside ? ` · ${aside} set aside` : ""}`,
     body: timeline(o.timeline), footer: `<button class="btn" data-close>Close</button>` });
 }
 
 function openHistory(c) {
-  modal({ overline: esc(c.id), title: "Review history",
+  modal({ overline: esc(c.id), title: "History",
     body: `<ul class="list">${c.reviews.map(r => `<li><span class="grow"><b style="font-weight:500">${esc(r.decision)}</b> · Rev ${esc(r.rev_letter)}
       ${r.invalidated ? chip("historical", "Invalidated") : ""}<div class="muted" style="font-size:12px">${fmtDate(r.ts, true)}</div>
       ${r.rationale ? `<div style="font-size:13px">${esc(r.rationale)}</div>` : ""}</span></li>`).join("")}</ul>`,
@@ -448,7 +453,7 @@ function openHistory(c) {
 function openDetails(key, c, main) {
   const sec = SECTIONS[key];
   if (!sec) return;
-  const d = modal({ overline: `${esc(c.id)} · Case details`, title: sec.title, meta: sec.meta, body: sec.body, size: "lg",
+  const d = modal({ overline: esc(c.id), title: sec.title, meta: sec.meta, body: sec.body, size: "lg",
     footer: `<button class="btn" data-close>Close</button>` });
   bindContent(d.el, c, main, d.close);
 }
@@ -469,15 +474,32 @@ function openCandidate(i, c, main) {
     body: candidateDetail(x), size: "lg", footer: `${plan}<button class="btn" data-close>Close</button>` });
 }
 
+/** Deleting removes the case, its review history and sent-email records; the activity log keeps a record. */
+function confirmDelete(c) {
+  const d = modal({ overline: `${esc(c.id)} · Rev ${esc(c.rev_letter)}`, title: "Delete this case?",
+    body: `<p style="margin:0 0 8px"><b>${esc(c.title)}</b></p>
+      <p class="muted" style="margin:0">This cannot be undone.</p>`,
+    footer: `<button class="btn" data-close>Cancel</button><button class="btn danger" id="del-ok">Delete</button>` });
+  d.el.querySelector("#del-ok").onclick = async e => {
+    e.target.disabled = true;
+    try {
+      await api(`/cases/${encodeURIComponent(c.id)}`, { method: "DELETE" });
+      d.close(); toast(`${c.id} deleted`); refreshCounts(); location.hash = "#/cases";
+    } catch (err) { toast(err.message); e.target.disabled = false; }
+  };
+}
+
 function wire(main, c) {
   const $ = sel => main.querySelector(sel);
   $("#rerun") && ($("#rerun").onclick = e => rerunCase(c, main, null, e.currentTarget));
+  $("#delete") && ($("#delete").onclick = () => confirmDelete(c));
   $("#return") && ($("#return").onclick = () => openReturn(c, main));
   $("#history") && ($("#history").onclick = () => openHistory(c));
   $("#timeline") && ($("#timeline").onclick = () => openTimeline(c));
-  $("#approve") && ($("#approve").onclick = async () => {
+  $("#approve") && ($("#approve").onclick = async e => {
+    const b = e.currentTarget; b.disabled = true;
     try { await api(`/cases/${c.id}/review`, { method: "POST", body: { decision: "approve", rationale: "", rev: c.rev } }); toast(`Rev ${c.rev_letter} approved`); refreshCounts(); workspace(main, c.id); }
-    catch (e) { toast(e.message); }
+    catch (err) { toast(err.message); b.disabled = false; }
   });
   main.querySelectorAll("[data-sec]").forEach(b => b.onclick = () => openSection(b.dataset.sec, c, main));
   main.querySelectorAll("[data-detail]").forEach(b => b.onclick = () => openDetails(b.dataset.detail, c, main));
@@ -490,11 +512,12 @@ function wire(main, c) {
 }
 
 async function rerunCase(c, main, input, btn, close) {
+  const label = btn && btn.innerHTML;
   if (btn) { btn.disabled = true; btn.textContent = "Running…"; }
   try {
-    await api(`/cases/${c.id}/rerun`, { method: "POST", body: input ? { input } : {} });
-    close && close(); toast("New revision ready"); workspace(main, c.id);
-  } catch (e) { toast(e.message); if (btn) btn.disabled = false; }
+    const r = await api(`/cases/${c.id}/rerun`, { method: "POST", body: input ? { input } : {} });
+    close && close(); toast(`Rev ${r.rev_letter} ready`); refreshCounts(); workspace(main, c.id);
+  } catch (e) { toast(e.message); if (btn) { btn.disabled = false; btn.innerHTML = label; } }
 }
 
 /** Bind interactive content (copy, drafts switch, schedule tools). Works on the page or inside a dialog. */
@@ -533,14 +556,17 @@ function bindContent(root, c, main, close) {
     check(a.slice(0, 16), z.slice(0, 16));
   });
   sec.querySelector("#pt-block-open").onclick = () => { const r = sec.querySelector("#pt-block-row"); r.hidden = !r.hidden; if (!r.hidden) sec.querySelector("#pt-note").focus(); };
-  sec.querySelector("#pt-block").onclick = async () => {
+  sec.querySelector("#pt-block").onclick = async e => {
     const note = v("#pt-note").trim();
     if (!note) return toast("Add a reason");
+    if (!v("#pt-start") || !v("#pt-end")) return toast("Enter a start and end");
+    const btn = e.currentTarget; btn.disabled = true;
     try {
       for (const b of buildings.length ? buildings : [null])
         await api("/events", { method: "POST", body: { title: `Not available: ${note}`, start: v("#pt-start"), end: v("#pt-end"), building: b, kind: "blocked", note } });
       toast("Time blocked"); sec.querySelector("#pt-block-row").hidden = true; check(v("#pt-start"), v("#pt-end"));
-    } catch (e) { toast(e.message); }
+    } catch (err) { toast(err.message); }
+    btn.disabled = false;
   };
   const t = sec.querySelector("#ask-temp");
   if (t) t.onclick = () => rerunCase(c, main, { temporary_space: true }, t, close);

@@ -79,6 +79,7 @@ class CaseStore:
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self._lock = threading.Lock()
+        self.outage_lock = threading.RLock()       # held while checking for and opening an outage case (API and email)
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS cases (id TEXT PRIMARY KEY, kind TEXT, title TEXT, status TEXT, rev INTEGER,
                 created TEXT, updated TEXT, input TEXT, output TEXT, run_id TEXT);
@@ -104,8 +105,7 @@ class CaseStore:
         title = case_title(kind, out)
         prefix = "SA" if kind == "space" else "OC"
         with self._lock:
-            n = self.db.execute("SELECT COUNT(*) FROM cases WHERE kind=?", (kind,)).fetchone()[0] + 1
-            cid = f"{prefix}-{n:04d}"
+            cid = f"{prefix}-{self._next_number(prefix):04d}"
             now = datetime.now().isoformat(timespec="seconds")
             self.db.execute("INSERT INTO cases VALUES (?,?,?,?,?,?,?,?,?,?)",
                             (cid, kind, title, "ReadyForReview", 1, now, now, dumps(inp), dumps(out), out.get("run_id")))
@@ -114,12 +114,38 @@ class CaseStore:
         log.info(f"case created id={cid} kind={kind}")
         return self.get(cid)
 
-    def rerun(self, cid: str, inp: dict, out: dict) -> dict:
+    def _next_number(self, prefix: str) -> int:
+        """One more than the highest number ever used, including deleted cases (kept in the audit log),
+        so a case number is never reused."""
+        used = [r[0] for r in self.db.execute("SELECT id FROM cases WHERE id LIKE ?", (f"{prefix}-%",))]
+        used += [r[0] for r in self.db.execute("SELECT DISTINCT case_id FROM audit WHERE case_id LIKE ?", (f"{prefix}-%",))]
+        nums = [int(x.split("-")[1]) for x in used if x and x.split("-")[1].isdigit()]
+        return max(nums, default=0) + 1
+
+    def delete(self, cid: str, actor: str) -> dict:
+        """Delete a case with its reviews and sent-email records. Emails that opened it stay in the inbox (unlinked).
+        The audit log keeps a record of the deletion."""
         case = self.get(cid)
         if not case:
             raise KeyError(cid)
-        rev = case["rev"] + 1
         with self._lock:
+            self.db.execute("DELETE FROM reviews WHERE case_id=?", (cid,))
+            for table, sql in (("outbox", "DELETE FROM outbox WHERE case_id=?"),
+                               ("inbox", "UPDATE inbox SET case_id=NULL, action='case deleted' WHERE case_id=?")):
+                if self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+                    self.db.execute(sql, (cid,))
+            self.db.execute("DELETE FROM cases WHERE id=?", (cid,))
+            self.db.commit()
+        self.audit(actor, "case_deleted", cid, f"{case['title']} · Rev {case['rev_letter']} · {case['status']}")
+        log.info(f"case deleted id={cid}")
+        return {"deleted": cid, "title": case["title"]}
+
+    def rerun(self, cid: str, inp: dict, out: dict) -> dict:
+        with self._lock:                                   # read the revision and write the next one together
+            case = self.get(cid)
+            if not case:
+                raise KeyError(cid)
+            rev = case["rev"] + 1
             self.db.execute("UPDATE reviews SET invalidated=1 WHERE case_id=? AND rev<?", (cid, rev))
             self.db.execute("UPDATE cases SET rev=?, status='ReadyForReview', updated=?, input=?, output=?, run_id=?, title=? WHERE id=?",
                             (rev, datetime.now().isoformat(timespec="seconds"), dumps(inp), dumps(out), out.get("run_id"),
@@ -129,18 +155,20 @@ class CaseStore:
         return self.get(cid)
 
     def review(self, cid: str, decision: str, rationale: str, rev: int) -> dict:
-        case = self.get(cid)
-        if not case:
-            raise KeyError(cid)
         if decision not in DECISIONS:
             raise ValueError(f"decision must be one of {sorted(DECISIONS)}")
         if decision in ("return", "decline") and not rationale.strip():
             raise ValueError("A written rationale is required to return or decline")
-        if rev != case["rev"]:
-            raise ValueError(f"Review targets Rev {rev_letter(rev)} but the current revision is {case['rev_letter']}")
-        if case["status"] in ("Approved", "Declined"):
-            raise ValueError(f"Case is already {case['status']}")
-        with self._lock:
+        with self._lock:                                   # checks and the decision together: two clicks record one
+            case = self.get(cid)
+            if not case:
+                raise KeyError(cid)
+            if rev != case["rev"]:
+                raise ValueError(f"Review targets Rev {rev_letter(rev)} but the current revision is {case['rev_letter']}")
+            if case["status"] in ("Approved", "Declined"):
+                raise ValueError(f"Case is already {case['status']}")
+            if any(r["rev"] == rev and r["decision"] == decision and not r["invalidated"] for r in case["reviews"]):
+                raise ValueError(f"Rev {rev_letter(rev)} was already {decision}d" if decision.endswith("e") else f"Rev {rev_letter(rev)} was already {decision}ed")
             self.db.execute("INSERT INTO reviews (case_id, rev, decision, rationale, reviewer, ts) VALUES (?,?,?,?,?,?)",
                             (cid, rev, decision, rationale, REVIEWER, datetime.now().isoformat(timespec="seconds")))
             self.db.execute("UPDATE cases SET status=?, updated=? WHERE id=?",
@@ -148,6 +176,20 @@ class CaseStore:
             self.db.commit()
         self.audit(REVIEWER, f"review_{decision}", cid, f"Rev {rev_letter(rev)}: {rationale}".strip())
         return self.get(cid)
+
+    def find_outage(self, reference: str | None = None, source: dict | None = None) -> dict | None:
+        """The existing case for an outage request: same TRIRIGA request number (SR-…), or the same source notice
+        (message, thread file or scenario). One request has one case; later information becomes a new revision."""
+        if not reference and not source:
+            return None
+        rows = self.db.execute("SELECT id, input, output FROM cases WHERE kind='outage' ORDER BY updated DESC").fetchall()
+        for r in rows:
+            inp, out = json.loads(r["input"]), json.loads(r["output"])
+            if reference and reference in ((out.get("outage") or {}).get("request_reference"), inp.get("thread_key")):
+                return self.get(r["id"])
+            if source and all(k in inp and inp[k] == v for k, v in source.items()):
+                return self.get(r["id"])
+        return None
 
     def get(self, cid: str) -> dict | None:
         r = self.db.execute("SELECT * FROM cases WHERE id=?", (cid,)).fetchone()

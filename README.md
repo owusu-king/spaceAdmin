@@ -5,6 +5,9 @@ Deep Learning course. Two intelligent agents, a trained neural network and a pro
 administrator (James) **find and assess space** and **coordinate infrastructure outages**, using the real records and
 correspondence he supplied. The agents prepare analyses and drafts; a human always reviews and approves.
 
+**Start here:** [docs/SETUP.md](docs/SETUP.md) (install and connect to Rice) · [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)
+(how it works, metrics and evaluation) · [docs/Campus_Facilities_AI_Presentation.pptx](docs/Campus_Facilities_AI_Presentation.pptx) (15 slides).
+
 ---
 
 ## 1. Project Overview
@@ -95,7 +98,7 @@ switches say (see §8, *Settings*).
 ### How they communicate
 
 The agents cannot call each other's tools. The Outage Agent may send one permitted intent, `temporary_space_request`, to the
-coordinator. James rarely needs temporary space, so this happens **only on request** (*Find temporary space* in an
+coordinator. James rarely needs temporary space, so this happens **only on request** (*Temporary space* in an
 outage case's Schedule section, or `cooperate=True`), and only for outages of ≥ 4 h on lab or occupancy-limiting systems. The coordinator validates
 it, runs the Space Administrator Agent with the affected buildings excluded, and returns `temporary_space_options`. Any other
 intent is rejected. All messages carry the run id and appear in the case's *Evidence* section.
@@ -189,7 +192,9 @@ FacilitiesAI/
 │   ├── scenarios.py         Scenario library from the real materials + expectations
 │   ├── evaluation.py        Scenario and safety evaluation
 │   ├── experiments.py       Cooperation and competition experiments  (python -m app.experiments)
-│   ├── integrations/email.py  Email intake: replay or read-only IMAP, triage, threading, automatic cases
+│   ├── integrations/email.py  Email intake: replay or read-only IMAP, threading, automatic cases
+│   ├── integrations/triage.py Email triage agent (LangGraph): rules, local model, review by James
+│   ├── triage_eval.py       Triage evaluation: keyword rule vs model vs agent  (python -m app.triage_eval)
 │   ├── integrations/mailer.py Outgoing email over SMTP (used only by the send endpoint, never by agents)
 │   ├── voice/               Local voice conversation for space requests (§8a)
 │   │   ├── engines.py       Installed speech models: Parakeet speech-to-text, Kokoro voice, Silero speech detection
@@ -202,8 +207,9 @@ FacilitiesAI/
 ├── models/                  space_function_net.pt, encoder.json, metrics.json, oof_predictions.csv, ablation.json
 ├── data/                    evaluation.json, experiments.json (+ generated cache, facilities.db, events.db)
 ├── notebooks/               01_deep_learning.ipynb, 02_intelligent_agents.ipynb, build_notebooks.py
-├── tests/                   pytest suite (84 tests)
-├── datares/, docs/          Original project materials (read-only, never modified)
+├── tests/                   pytest suite (105 tests)
+├── datares/                Original project materials (read-only, never modified, not in Git)
+├── docs/                    SETUP.md, HOW-IT-WORKS.md, the presentation, and the original design documents
 ├── .env.example             Every configuration variable, documented (copy to .env, which is git-ignored)
 └── requirements.txt
 ```
@@ -253,7 +259,7 @@ Copy-Item .env.example .env
 Restart the server after editing `.env`.
 
 **Email intake (Outage Agent).** By default (`FAI_EMAIL_SOURCE=replay`) the app *replays* the supplied correspondence as if it
-were arriving (Outages → Email intake → *Check for new email*). To read a real mailbox, set in `.env`:
+were arriving (Outages → Email intake → *Check now*). To read a real mailbox, set in `.env`:
 `FAI_EMAIL_SOURCE=imap`, `FAI_IMAP_HOST`, `FAI_IMAP_USER`, `FAI_IMAP_PASSWORD` (an app password).
 Optional: `FAI_IMAP_FOLDER` (default `INBOX`), `FAI_IMAP_SINCE_DAYS` (default 14), `FAI_EMAIL_POLL_SECONDS` (e.g. `300` for
 automatic checks; default 0 = manual), `FAI_REPLAY_SINCE` (replay start date, default `2026-10-01`). The adapter is **read-only by construction**: it opens the folder with `readonly=True` and fetches with
@@ -301,7 +307,7 @@ away in a dialog.** Dialogs keep the page behind them still, and page width neve
 |---|---|
 | **Overview** | Greeting and date; four linked figures (cases awaiting review, outages in the next 45 days, recorded Natural Sciences vacancies, records to verify); **Needs your review** (top 3, most recently updated first) beside a **Next 30 days** agenda of outages, calendar events and blocked times; a Natural Sciences seating bar (over / at / under capacity, vacant) and the model's most common disagreements. Everything links to its page; nothing opens a dialog |
 | **Spaces** | Tabs *All · Vacancies · Model flags*, one search box (room, standard or department), building and function filters. Click a row for the space record dialog: record, model view, occupants and the floor-plan PDF |
-| **Outages** | Three facts that open dialogs: **Calendar** (events and blocked times; add, block, import `.ics`), **Email** (intake status, check for new email) and **Recurring** (estimates and their measured accuracy). Below, *Upcoming · History* tabs; a row opens the request, with "Review with Outage Agent" |
+| **Outages** | Three facts that open dialogs: **Calendar** (events and blocked times; add, block, import `.ics`), **Email** (intake status, check for new email) and **Recurring** (estimates and their measured accuracy). Below, *Upcoming · History* tabs; a row opens the request, with "Analyze" |
 | **Cases** | *To review · Decided · All* tabs. A case page has three levels: (1) header with case no., revision, status, Re-run, **Return / Decline** and Approve, plus *Timeline* and *History* links; key facts; **Needs attention** (conflicts, top questions). (2) **One main card**: for an outage, *Notify affected people* (count, View people, **Review drafts**); for a space request, the ranked candidate table (a row opens the candidate). (3) **Case details** tiles, each opening that section alone: outage — Notice, Schedule, Impact, Departments, Questions, Evidence (and Temporary space when requested); space — Requirements, Questions, More candidates, Evidence |
 | **Model** | Three key figures (macro-F1, accuracy, unseen buildings), then charts on the page: loss, validation macro-F1, against baselines, F1 by category, confusion matrix. Top-right buttons open Design, Records to verify and the Ablation study |
 | **Agents** | Four figures (evaluation, cooperation, competition, activity), the two agent profiles, and dialogs for Evaluation (run again), Experiments (run again), Communication and the Activity log |
@@ -316,7 +322,7 @@ number, Email or Space request) is shown under the title.
   needed ("a room for Professor Bartel's new hire, at least 120 square feet"); the agent asks for anything missing,
   answers aloud with the best candidates, and **Create case** saves the result for review. The **Form** tab is the
   alternative (it is pre-filled with what was said): type, department, function, area; for a new hire enter the
-  professor in **Close to (person)** → **Run analysis**. The candidate table shows the distance to the reference office;
+  professor in **Near person** → **Run analysis**. The candidate table shows the distance to the reference office;
   click a candidate for its criteria, conditions, unknowns, the model's view and the floor plan.
 * *Outage review:* **Review outage notice** (Outages) or **Outage notice** (Cases) → pick a notice on record, a whole thread, or paste an email →
   **Run analysis** (or let email intake open the case). On the case, **Review drafts** gives the coordination email and the
@@ -325,7 +331,9 @@ number, Email or Space request) is shown under the title.
   the people notice goes as BCC); **View people** lists who is affected, with CSV export.
 * *"Not at that time":* **Reschedule** in Needs attention (or Case details → Schedule) → pick a suggested time or enter the
   time Facilities or a department proposes → **Check**, or **Block…** with a reason. Blocked times are flagged in every
-  later check. *Find temporary space* asks the Space agent, on request only.
+  later check. *Temporary space* asks the Space agent, on request only.
+* *Delete:* the trash icon on a case removes it (after a confirmation), with its revisions and reviews; the activity
+  log keeps a record and the case number is never reused.
 * *Review:* **Approve Rev X**, or **Return / Decline** with a reason. **Re-run** creates the next revision and marks
   earlier approvals invalidated; *History* shows every decision.
 
@@ -366,6 +374,19 @@ agent result as a normal space case (Rev A, ready for review); nothing is assign
 * *"Okay, save it as a case"* saves the rooms it found as a case, ready for review (once per result; the footer turns
   into *Open SA-…*). *"Approve it"* is declined: approval stays a click on the case page.
 
+**Listening, muting and noise.** The microphone listens hands-free from the moment the conversation opens; talking over
+the assistant interrupts it. The mic icon in the message field mutes: while muted (or with no microphone) the assistant
+**answers in text only**. Background sound: the speech detector (Silero) scores speech rather than loudness, so most
+noise never starts an utterance; a cough or a door cannot interrupt the assistant (that needs about a quarter second of
+actual speech, and your words are still captured from the start); and transcripts with no words in them ("uh", "hmm")
+are dropped. Short answers such as "yes" or "no" always get a reply; "yes" after the offer to save saves the case.
+With the voice assistant switched off, *New space request* shows only the form.
+
+**Start-up time.** The models are warmed in the background when the app is opened (and when the switch is turned on);
+the language model stays loaded for two hours. Every request uses the same model options, because a different context
+size makes Ollama reload the model. Measured cold start (model not in memory, dialog opened immediately): conversation
+ready in 2 s, first agent step at about 3 s, full answer at about 5 s.
+
 **Settings → Voice assistant**: one switch (off by default; it does not need `FAI_ALLOW_UNLOCK` because nothing leaves the
 machine) and three pickers that list **only models installed on this computer**: language model (from Ollama; models without
 tool calling are shown but cannot be chosen), speech-to-text model (folders in `models/voice/stt`) and voice. When the switch is
@@ -392,6 +413,81 @@ Invoke-WebRequest https://github.com/thewh1teagle/kokoro-onnx/releases/download/
 **Measured on the development laptop (RTX 4070 laptop GPU, 8 GB):** Parakeet transcribes a 7-second sentence in about
 0.25 s; the first spoken sentence of a reply starts about 1-4 s after James stops talking (longer when the agent searches);
 Kokoro needs about 1.6 s per 7 s of speech on the CPU, so replies are spoken sentence by sentence.
+
+### 8b. Email triage agent (LangGraph)
+
+Every incoming email passes through a small LangGraph agent (`app/integrations/triage.py`) that decides whether it is
+about a building outage before anything else happens:
+
+```
+rules ─┬─ decided ─────────────────────────────┐
+       └─ model ─► decide ─┬─ outage ─► case   │  Outage Agent opens or updates the case, as before
+                           ├─ not ────► ignore │  only sender, subject and date are kept
+                           └─ unsure ─► hold   │  "Needs your review" in Outages → Email
+```
+
+* **Rules** settle the certain cases without a model: TRIRIGA notices, replies in a thread that already has a case,
+  and James's own decisions.
+* **Model**: the local language model chosen in Settings (Ollama) reads sender, subject and the start of the body and
+  returns outage or not, a confidence and a one-line reason. Without Ollama the keyword rule is used, so intake never stops.
+* **Decide** files an email automatically only when the model is confident (≥ 0.75) and does not contradict the keyword
+  rule; everything else is **held for James**. A real outage wrongly ignored is the costly mistake, so disagreement always
+  goes to a person.
+* **Review**: held emails appear first in *Outages → Email* with the agent's reason and two buttons, *Outage* / *Not an
+  outage*. James's choice runs the same graph again (his label is accepted by the rules node) and files the email: an
+  outage opens or updates a case; anything else is ignored and its text deleted. Every row shows who decided
+  (Rule, Model with confidence, Keywords, You).
+
+**Evaluation** (`python -m app.triage_eval`, results in `data/triage_eval.json`, summary in the Email dialog).
+379 labelled emails: 361 from the supplied correspondence (labelled per thread in
+`data/triage_labels.json`; 13 borderline threads left out) and 18 clearly marked synthetic ones
+(ordinary inbox mail, and informal outage reports without keywords), 342 outage and
+37 not. Model: qwen3:8b.
+
+| Strategy | Precision | Recall | F1 | Outages missed | Held for James |
+|---|---|---|---|---|---|
+| A · Keyword rule (before) | 0.997 | 0.915 | 0.954 | 29 | – |
+| B · Local model alone | 0.990 | 0.880 | 0.932 | 41 | – |
+| **C · Triage agent, after James reviews** | **0.991** | **0.971** | **0.981** | **10** | 29 (8%) |
+| C · on the emails it filed itself | 0.990 | 0.968 | 0.979 | – | – |
+
+The evaluation scores each email on its own, so it cannot use the thread rule; in live intake, most of the agent's
+remaining misses (replies such as "Re: Follow up" deep in a thread) are filed by that rule once the thread has a case.
+A few disagreements may be label errors (e.g. a thread labelled as a vendor proposal discusses a compressed-air outage).
+Caveats: the labels are provisional (written by the development assistant, to be confirmed by James), the supplied mail
+comes mostly from outage threads, the synthetic set is small, and the model's confidence is its own estimate. About
+2.71 s per email on the development laptop.
+
+### 8c. Live connections
+
+The app reads live data three ways, all **read-only**, all visible in *Settings → Connections*.
+
+| What | How it stays current | Code |
+|---|---|---|
+| **Outage email** | Microsoft 365 (Graph). The chosen mailbox folder is checked every 60 s with a *delta query* (only new mail is fetched); each email goes through the triage agent; outages open or update cases, and the navigation shows "N new cases to review" within 30 s | `app/integrations/msgraph.py` |
+| **Space and people records** | The two Excel reports are watched where they already live: SharePoint/OneDrive (through the same Microsoft 365 connection) or a folder that a scheduled export or OneDrive sync fills. When a file changes it is validated, compared (rooms added / removed / changed, people added / removed / moved), kept as a dated snapshot, and the agents switch to it without a restart. A broken export never replaces good data | `app/data/records.py` |
+| **Case list** | The browser checks for new cases every 30 s | `web/js/app.js` |
+
+**Connecting Microsoft 365 (one-time, done with Rice IT).**
+1. Rice IT registers an app (Azure portal → *App registrations* → *New*), single tenant, and turns on *Allow public client flows*.
+2. API permissions, Microsoft Graph, **delegated**: `Mail.Read`, `Mail.Read.Shared` (for a shared mailbox), `Files.Read.All`, `offline_access`, `User.Read`. Admin consent if Rice requires it.
+   For an unattended service instead: **application** permission `Mail.Read` plus an *application access policy* limiting it to the one mailbox, and a client secret (`FAI_GRAPH_AUTH=app`).
+3. In `.env`: `FAI_GRAPH_TENANT_ID`, `FAI_GRAPH_CLIENT_ID`, `FAI_GRAPH_MAILBOX` (`me` or e.g. a shared `facilities-outages@rice.edu`), `FAI_GRAPH_FOLDER`, and `FAI_EMAIL_SOURCE=graph`. Restart.
+4. *Settings → Connections → Connect*: the app shows a code; James enters it at microsoft.com/devicelogin and signs in himself. The app never sees his password; the token is stored in `data/graph_token.json` (git-ignored) and refreshed automatically. *Disconnect* deletes it.
+
+The reader can only make GET requests: messages are never marked read, moved, or deleted, and nothing can be sent.
+Recommended set-up: a dedicated mailbox (or an Outlook rule that forwards TRIRIGA and facilities mail to one), so the
+app sees only facilities mail.
+
+**Records without moving files.** `FAI_RECORDS_SOURCE=microsoft` with the reports' SharePoint/OneDrive links in
+`FAI_RECORDS_SPACE_URL` / `FAI_RECORDS_PEOPLE_URL`, or `FAI_RECORDS_SOURCE=folder` with `FAI_RECORDS_DIR` pointing to the
+folder the exports land in. `FAI_RECORDS_REFRESH_MINUTES=60` checks hourly (only file metadata is read until a file
+changes); *Check now* in Settings checks immediately. Rooms the model has not seen get predictions from the deployed
+model; when many records change, retrain (`python -m app.ml.train`).
+
+**Not yet (needs Rice IT):** instant push instead of 60-second checks (Graph change notifications need a public HTTPS
+endpoint); reading space and people data straight from TRIRIGA (its REST/OSLC API with a read-only service account)
+instead of its exported reports; and the people directory from Rice's identity system.
 
 ---
 
@@ -448,6 +544,9 @@ than real record drift, so these are relative comparisons, not field performance
   follow-ups refine the same request, unknown buildings questioned, interruption stops the reply, the voice switch needs no
   unlock key but needs installed models, only installed tool-capable models can be chosen, the WebSocket refuses when off,
   a typed turn speaks and saves a case, and (with the real local models) speech is segmented and interrupts the assistant.
+* `test_triage.py` — the decide rule (confident agreement filed, disagreement or low confidence held, keyword fallback
+  without a model), rules settle TRIRIGA notices, known threads and James's decisions without calling the model, intake
+  files / ignores (no body kept) / holds, and James's decision files a held email once.
 * `test_settings_and_send.py` — switches off by default and locked without `FAI_ALLOW_UNLOCK`, mail configuration
   required, unbuilt integrations stay locked, every send guard (switch, approval, confirmation, revision, once per revision),
   test-address redirect, live delivery depends on *Send email* and uses BCC, auto-off timer, agents still locked.

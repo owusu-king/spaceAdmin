@@ -1,5 +1,5 @@
 // Shell and hash router. Each view module exports render(main, params) and sets the breadcrumb.
-import { api, esc, icon } from "./lib.js";
+import { api, esc, icon, isKnownCase, noteCases, toast } from "./lib.js";
 import * as overview from "./views/overview.js";
 import * as spaces from "./views/spaces.js";
 import * as outages from "./views/outages.js";
@@ -26,10 +26,15 @@ export function setCrumbs(parts) {
     i === parts.length - 1 ? `<b>${esc(p.label)}</b>` : `<a href="${p.href}">${esc(p.label)}</a>`).join(" &nbsp;›&nbsp; ");
 }
 
+let primed = false;
 export async function refreshCounts() {
   try {
     const list = await api("/cases");
-    const n = list.filter(c => c.status === "ReadyForReview" || c.status === "NeedsRevision").length;
+    const open = list.filter(c => c.status === "ReadyForReview" || c.status === "NeedsRevision");
+    const n = open.length;
+    const arrived = primed ? open.filter(c => !isKnownCase(c.id)) : [];   // live: e.g. opened by outage email
+    noteCases(list.map(c => c.id)); primed = true;
+    if (arrived.length) toast(arrived.length === 1 ? `New case to review · ${arrived[0].id}` : `${arrived.length} new cases to review`, 5000);
     const el = document.querySelector('[data-count="cases"]');
     if (el) el.textContent = n || "";
   } catch { /* counts are decorative; ignore */ }
@@ -45,6 +50,7 @@ function renderNav(active) {
 async function route() {
   const [, id = "overview", ...rest] = (location.hash || "#/overview").split("?")[0].split("/");
   const entry = NAV.find(n => n.id === id) || NAV[1];
+  if (id === "cases" && rest[0]) noteCases(decodeURIComponent(rest[0]));
   renderNav(entry.id);
   const main = document.getElementById("main");
   main.innerHTML = "";
@@ -55,3 +61,7 @@ async function route() {
 
 window.addEventListener("hashchange", route);
 route();
+// Live: new cases (e.g. opened by outage email) show up in the navigation within half a minute.
+setInterval(refreshCounts, 30000);
+// Get the local voice models ready in the background while James looks around (no-op when voice is off).
+fetch("/api/v1/voice/warm", { method: "POST" }).catch(() => {});

@@ -1,4 +1,4 @@
-import { api, chip, empty, errorBanner, esc, fmtNum, icon, modal, notOnRecord, openPanel, pct, roomKey, skeleton, toast, val } from "../lib.js";
+import { api, chip, empty, errorBanner, esc, fmtNum, icon, modal, notOnRecord, noteCases, openPanel, pct, roomKey, skeleton, toast, val } from "../lib.js";
 import { setCrumbs } from "../app.js";
 import { Conversation, conversationAvailable } from "../voice.js";
 
@@ -16,7 +16,7 @@ export async function render(main) {
     history.replaceState(null, "", "#/spaces");  // later filter changes are the user's own
   }
   main.innerHTML = `
-    <div class="page-head"><div><h1>Spaces</h1><p>Room records and the model's view of use</p></div>
+    <div class="page-head"><div><h1>Spaces</h1><p>Room records</p></div>
       <div class="actions"><button class="btn primary" id="req">${icon("plus")}New space request</button></div></div>
     <div class="filters" id="filters"></div>
     <div id="table">${skeleton(8)}</div>`;
@@ -66,7 +66,7 @@ function filters(main, d) {
   const f = main.querySelector("#filters");
   f.innerHTML = `
     <div class="seg inline" role="tablist">${VIEWS.map(([v, l]) => `<button data-v="${v}" class="${state.view === v ? "on" : ""}">${l}</button>`).join("")}</div>
-    <input class="input" id="f-q" placeholder="Search room, standard or department" value="${esc(state.q)}" aria-label="Search" style="flex:1;min-width:220px">
+    <input class="input" id="f-q" placeholder="Search" value="${esc(state.q)}" aria-label="Search" style="flex:1;min-width:220px">
     <select class="input" id="f-b" aria-label="Building">${opts(names, state.building, "All buildings")}</select>
     <select class="input" id="f-g" aria-label="Function">${opts(d.groups, state.group, "All functions")}</select>
     ${state.ns ? `<button class="tag" id="f-ns" title="Remove filter" style="cursor:pointer;border:0">Natural Sciences ✕</button>` : ""}
@@ -100,18 +100,18 @@ async function inspect(id) {
         <dt>Class</dt><dd>${val(s.space_class)}</dd>
         <dt>Standard</dt><dd>${val(s.space_standard)}</dd>
         <dt>Area</dt><dd>${s.area == null ? notOnRecord() : `${fmtNum(s.area, 0)} sf`}</dd>
-        <dt>Seating</dt><dd>${val(seat)}${s.seat_status === "Vacant" ? ` <span class="muted" style="font-size:12px">· not an assignment</span>` : ""}</dd>
+        <dt>Seating</dt><dd>${val(seat)}</dd>
         <dt>Allocation</dt><dd>${val(s.allocation)}</dd>
         <dt>Alignment</dt><dd>${val(s.ssa)}</dd>
       </dl></div>
     <div>
-      <div class="overline" style="margin-bottom:8px">Model view</div>
+      <div class="overline" style="margin-bottom:8px">Model</div>
       ${m.status !== "success" ? notOnRecord("No prediction") : `
-        <div style="margin-bottom:10px">${m.verify_flag ? chip("inferred", `Looks like ${m.predicted_group} · verify use`) : chip("confirmed", "Consistent with record")}</div>
+        <div style="margin-bottom:10px">${m.verify_flag ? chip("inferred", `Looks like ${m.predicted_group}`) : chip("confirmed", "Matches record")}</div>
         ${m.top3.map(t => `<div class="gauge" style="grid-template-columns:130px 1fr 40px;margin-top:6px"><span>${esc(t.group)}</span><div class="bar"><i style="width:${t.p * 100}%"></i></div><span class="v">${t.p.toFixed(2)}</span></div>`).join("")}`}
       <div class="overline" style="margin:22px 0 4px">Occupants · ${r.occupants.length}</div>
       ${r.occupants.length ? `<ul class="list">${r.occupants.slice(0, 6).map(o => `<li><span class="grow">${esc(o.name)}<div class="muted" style="font-size:12px">${esc(o.role)} · ${esc(o.department)}</div></span></li>`).join("")}
-        ${r.occupants.length > 6 ? `<li class="muted">+${r.occupants.length - 6} more</li>` : ""}</ul>` : `<p class="muted" style="margin:6px 0 0">None recorded</p>`}
+        ${r.occupants.length > 6 ? `<li class="muted">+${r.occupants.length - 6} more</li>` : ""}</ul>` : `<p class="muted" style="margin:6px 0 0">None</p>`}
     </div></div>`;
   d.el.querySelector("#plan").innerHTML = r.floor_plan
     ? `<a class="btn" href="${r.floor_plan.url}" target="_blank" rel="noopener" title="${esc(r.floor_plan.snapshot)} snapshot">${icon("file")}Floor plan</a>` : "";
@@ -122,16 +122,21 @@ async function inspect(id) {
  *  alternative. Switching to the form carries over what was said. Both end in a case for review. */
 export async function newSpaceRequest(prefill = {}) {
   let conv = null;
-  const p = openPanel(`<div class="dr-head sr-head"><div><div class="overline">Space Administrator Agent</div><h2>New space request</h2></div>
-      <div class="seg inline sr-mode" role="tablist" aria-label="How to make the request">
+  // Voice assistant switched off in Settings: the dialog is just the form, with no Conversation/Form toggle.
+  const voiceOn = await api("/voice/status").then(r => r.enabled).catch(() => false);
+  const head = `<div class="dr-head sr-head"><div><h2>New space request</h2></div>
+      ${voiceOn ? `<div class="seg inline sr-mode" role="tablist" aria-label="How to make the request">
         <button type="button" role="tab" data-mode="talk" aria-selected="true" class="on">${icon("mic")}Conversation</button>
-        <button type="button" role="tab" data-mode="form" aria-selected="false">Form</button></div>
-      <button type="button" class="sr-close" data-close aria-label="Close" title="Close">${icon("x")}</button></div>
-    <div class="sr-pane" data-pane="talk"><div class="sr-talk"><div class="vx-loading">${icon("mic")}<span>Checking the voice assistant…</span></div></div>
-      <div class="dr-foot"><span class="muted sr-hint">The agent ranks candidates; nothing is assigned.</span>
-        <button class="btn primary" id="sr-create" disabled>Create case</button></div></div>
-    <div class="sr-pane" data-pane="form" hidden>${requestForm(prefill)}</div>`, { modal: true, dismissible: false, onClose: () => conv && conv.close() });
+        <button type="button" role="tab" data-mode="form" aria-selected="false">Form</button></div>` : ""}
+      <button type="button" class="sr-close" data-close aria-label="Close" title="Close">${icon("x")}</button></div>`;
+  const p = openPanel(voiceOn ? `${head}
+    <div class="sr-pane" data-pane="talk"><div class="sr-talk"><div class="vx-loading">${icon("mic")}<span>Starting…</span></div></div>
+      <div class="dr-foot"><button class="btn primary" id="sr-create" disabled>Create case</button></div></div>
+    <div class="sr-pane" data-pane="form" hidden>${requestForm(prefill)}</div>`
+    : `${head}<div class="sr-pane" data-pane="form">${requestForm(prefill)}</div>`,
+    { modal: true, dismissible: false, onClose: () => conv && conv.close() });
   p.el.classList.add("sr-dialog");
+  if (!voiceOn) p.el.classList.add("sr-form-only");
   const el = p.el;
 
   const setMode = mode => {
@@ -142,6 +147,7 @@ export async function newSpaceRequest(prefill = {}) {
   };
   el.querySelectorAll("[data-mode]").forEach(b => b.onclick = () => setMode(b.dataset.mode));
   bindForm(el, p);
+  if (!voiceOn) return;
 
   const create = el.querySelector("#sr-create");
   create.onclick = () => { create.disabled = true; create.textContent = "Creating…"; conv.save(); };
@@ -149,22 +155,23 @@ export async function newSpaceRequest(prefill = {}) {
   const avail = await conversationAvailable();
   const talk = el.querySelector(".sr-talk");
   if (!avail.ok) {
-    talk.innerHTML = `<div class="sr-off">${icon("mic")}<div><b>Conversation is not available.</b> ${esc(avail.why)}
-      <div class="sr-off-actions"><a class="btn sm" href="#/settings" data-close>Open Settings</a>
-      <button class="btn sm primary" type="button" id="sr-useform">Use the form</button></div></div></div>`;
+    // switched on, but the local models are not ready (e.g. Ollama not running): say so, keep the form one click away
+    talk.innerHTML = `<div class="sr-off">${icon("attention")}<div><b>Voice not ready.</b> ${esc(avail.why)}
+      <div class="sr-off-actions"><button class="btn sm primary" type="button" id="sr-useform">Use the form</button></div></div></div>`;
     talk.querySelector("#sr-useform").onclick = () => setMode("form");
-    setMode("form");
     return;
   }
   conv = new Conversation(talk, avail.opts, {
     onChange: ({ canSave }) => { create.disabled = !canSave; },
+    onError: () => { if (create.textContent === "Creating…") { create.textContent = "Create case"; create.disabled = false; } },
     onSaved: (id, via) => {
+      noteCases(id);
       if (via === "voice") {                       // saved by voice: keep talking; the footer opens the case
         create.disabled = false; create.textContent = `Open ${id}`;
         create.onclick = () => { p.close(); location.hash = `#/cases/${id}`; };
         return;
       }
-      p.close(); toast(`${id} created · Rev A ready for review`); location.hash = `#/cases/${id}`;
+      p.close(); toast(`${id} created`); location.hash = `#/cases/${id}`;
     },
   });
   conv.start();
@@ -172,24 +179,23 @@ export async function newSpaceRequest(prefill = {}) {
 
 function requestForm(prefill) {
   const fns = ["Office", "Workstation", "Research Lab", "Teaching Lab", "Meeting", "Support & Storage"];
-  const types = [["new_office", "New faculty or staff office"], ["department_function", "Department operational function"],
-    ["change_assignment", "Change an existing assignment"], ["vacancy_review", "Leadership vacancy review"]];
+  const types = [["new_office", "New office"], ["department_function", "Department function"],
+    ["change_assignment", "Assignment change"], ["vacancy_review", "Vacancy review"]];
   return `<form class="dr-body stack" id="sf">
       <div class="field"><label for="rt">Request type</label><select class="input" id="rt">${types.map(([v, l]) => `<option value="${v}" ${prefill.request_type === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
       <div class="field"><label for="dp">Department</label><input class="input" id="dp" placeholder="e.g. Chemistry" value="${esc(prefill.department || "")}"></div>
-      <div class="field"><label for="nr">Close to (person)</label><input class="input" id="nr" placeholder="e.g. Bonnie Bartel or bartel" value="${esc(prefill.near || "")}"></div>
+      <div class="field"><label for="nr">Near person</label><input class="input" id="nr" placeholder="Name or NetID" value="${esc(prefill.near || "")}"></div>
       <div class="field" data-for="change_assignment"><label for="ni">Person NetID</label><input class="input" id="ni" placeholder="e.g. ljd1"></div>
       <div class="grid-2" style="gap:12px">
         <div class="field"><label for="fn">Function</label><select class="input" id="fn">${fns.map(f => `<option ${prefill.function === f ? "selected" : ""}>${f}</option>`).join("")}</select></div>
         <div class="field"><label for="ma">Minimum area (sf)</label><input class="input" id="ma" type="number" min="0" step="10" value="${esc(prefill.min_area || "")}"></div>
         <div class="field"><label for="se">Seats</label><input class="input" id="se" type="number" min="1" value="1"></div>
-        <div class="field"><label for="pb">Preferred buildings</label><input class="input" id="pb" placeholder="e.g. BRC, Keck"></div>
+        <div class="field"><label for="pb">Buildings</label><input class="input" id="pb" placeholder="e.g. BRC, Keck"></div>
       </div>
       <div class="field"><label for="no">Notes</label><textarea class="input" id="no" rows="3" placeholder="Optional"></textarea></div>
       <div id="err"></div>
     </form>
-    <div class="dr-foot"><span class="muted sr-hint">The agent ranks candidates; nothing is assigned.</span>
-      <button class="btn primary" id="go">Run analysis</button></div>`;
+    <div class="dr-foot"><button class="btn primary" id="go">Run analysis</button></div>`;
 }
 
 /** Carry the conversation's request over to the form (only fields that were established). */
@@ -216,7 +222,7 @@ function bindForm(f, p) {
     const btn = f.querySelector("#go"); btn.disabled = true; btn.textContent = "Analyzing…";
     try {
       const c = await api("/cases", { method: "POST", body: { kind: "space", input } });
-      p.close(); toast(`${c.id} created · Rev A ready for review`); location.hash = `#/cases/${c.id}`;
+      noteCases(c.id); p.close(); toast(`${c.id} created`); location.hash = `#/cases/${c.id}`;
     } catch (e) { f.querySelector("#err").innerHTML = `<div class="banner error">${icon("attention")}<div>${esc(e.message)}</div></div>`; btn.disabled = false; btn.textContent = "Run analysis"; }
   };
 }

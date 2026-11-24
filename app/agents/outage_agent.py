@@ -49,11 +49,11 @@ def _subject_words(subject: str) -> set[str]:
 class OutageAgent(Agent):
     name = "outage"
     objectives = [
-        "Interpret outage notices and operational emails; reconstruct the current confirmed scope and timing.",
-        "Separate confirmed impacts, potential impacts, preliminary concerns and explicitly unaffected services.",
-        "Identify Natural Sciences departments affected and their formal approvers, coordination contacts and recipients.",
-        "Review conflicts and schedule coverage; propose alternative windows when conflicts are likely.",
-        "Prepare a coordination plan and draft communications for approval; never send or edit records.",
+        "Read notices and emails; confirm scope and timing.",
+        "Sort impacts: confirmed, potential, unaffected.",
+        "Find affected departments, contacts and people.",
+        "Check conflicts; suggest other times.",
+        "Draft messages for approval; never send.",
     ]
     permissions = {"parse_outage_notice", "isolate_incident", "reconstruct_event_timeline", "find_related_outages",
                    "resolve_outage_scope", "assess_outage_impact", "find_affected_departments", "get_stakeholders",
@@ -372,10 +372,10 @@ class OutageAgent(Agent):
         if lab_only:   # lab systems: only people in recorded labs or rooms the model infers are lab-like
             lab_mask = sp["class_group"].isin(LAB_GROUPS).values | (pred["p_lab"].fillna(0).values >= AGENTS.lab_like_threshold)
             rooms = sp[lab_mask]
-            rule = f"Recorded occupants of laboratory or lab-like rooms that depend on {', '.join(systems)}"
+            rule = f"People in laboratory and lab-like rooms ({', '.join(systems)})"
         else:
             rooms = sp
-            rule = f"All recorded occupants of the affected building(s): {', '.join(systems) or 'systems'} affect the whole building"
+            rule = f"Everyone in the building ({', '.join(systems) or 'building-wide'})"
         recorded_lab = set(sp.loc[sp["class_group"].isin(LAB_GROUPS), "room_key"])
         people = self.ds.people[self.ds.people["room_key"].isin(set(rooms["room_key"]))]
         rows = []
@@ -420,9 +420,8 @@ class OutageAgent(Agent):
         excl = [i["statement"] for i in register["explicitly_unaffected"]][:3]
         if excl:
             lines += ["", "Not affected:"] + [f"- {e}" for e in excl]
-        lines += ["", "Could you confirm whether any experiments, deliveries, classes or accessibility needs in your "
-                  "areas conflict with this window?"]
-        lines += [f"- {q}" for q in questions[:2]]
+        lines += ["", "Does this window conflict with any experiments, classes, deliveries or accessibility needs?"]
+        lines += [f"- {q}" for q in questions if not q.startswith("Who coordinates")][:2]
         lines += ["", "Thank you,", "James"]
         coord_draft = {"kind": "coordination", "title": "Coordination with departments", "status": "DRAFT — NOT SENT",
                        "recipients": {"coordination_contacts": [f"{c['name']} <{c['email']}> ({c['verification']})" for c in to],
@@ -440,8 +439,7 @@ class OutageAgent(Agent):
                 n += ["", "What to expect:"] + [f"- {c}" for c in conf]
             if excl:
                 n += ["", "Not affected:"] + [f"- {e}" for e in excl]
-            n += ["", "If you have experiments, equipment, deliveries or accessibility needs that depend on these systems "
-                  "during this window, please reply so we can coordinate.", "", "Thank you,", "James"]
+            n += ["", "If this affects your work, please reply.", "", "Thank you,", "James"]
             drafts.append({"kind": "notification", "title": "Notice to affected people", "status": "DRAFT — NOT SENT",
                            "recipients": {"affected_people": len(ns_people),
                                           "departments": sorted({p["department"] for p in ns_people}),
@@ -519,9 +517,7 @@ class OutageAgent(Agent):
             "follow_up_questions": questions, "recommended_actions": plan, "communication_drafts": draft.data,
             "affected_people": people.data,
             "findings": findings, "required_approvals": [
-                "James (review of agent proposals before any message is sent)",
-                "Formal approver in TRIRIGA (outage approval)",
-                "Notification approval is separate from approval of the shutdown itself"],
+                "James (review)", "TRIRIGA approver (outage)"],
             "review_status": "pending", "trace": self.trace,
             "decision_note": "Recommendation pending review. The agent does not approve, send or reschedule.",
         }

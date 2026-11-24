@@ -55,8 +55,17 @@ def _sw(settings: dict, key: str) -> dict:
     return next(x for x in settings["switches"] if x["key"] == key)
 
 
-def _approved_case(client, scenario="OUT-ABL-STEAM"):
+def _fresh_case(client, scenario="OUT-ABL-STEAM"):
+    """A new case for the request. One request has one case, so an earlier test's case for it is removed first."""
     c = client.post("/api/v1/cases", json={"kind": "outage", "input": {"scenario": scenario}}).json()
+    if c.get("existing"):
+        client.delete(f"/api/v1/cases/{c['id']}")
+        c = client.post("/api/v1/cases", json={"kind": "outage", "input": {"scenario": scenario}}).json()
+    return c
+
+
+def _approved_case(client, scenario="OUT-ABL-STEAM"):
+    c = _fresh_case(client, scenario)
     client.post(f"/api/v1/cases/{c['id']}/review", json={"decision": "approve", "rationale": "", "rev": 1})
     return c
 
@@ -87,7 +96,7 @@ def test_unbuilt_integrations_cannot_be_switched_on(client, mail):
 
 
 def test_send_guards_and_test_mode(client, mail):
-    c = client.post("/api/v1/cases", json={"kind": "outage", "input": {"scenario": "OUT-ABL-STEAM"}}).json()
+    c = _fresh_case(client)
     send = {"draft": "coordination", "rev": 1, "confirm": True}
     assert client.post(f"/api/v1/cases/{c['id']}/send", json=send).status_code == 403            # switch off
     assert _sw(client.put("/api/v1/settings/send_email", json={"on": True}).json(), "send_email")["on"] is True

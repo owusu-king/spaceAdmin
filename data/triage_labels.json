@@ -1,0 +1,851 @@
+{
+ "note": "Provisional labels by the development assistant from subjects and first lines; to be confirmed by James. outage = reports, schedules, coordinates or follows up an interruption of a building service or system; not_outage = closures, parking, events, surveys, drills, sharing, construction without a service interruption; unsure = borderline, excluded from scores.",
+ "threads": 168,
+ "counts": {
+  "outage": 132,
+  "not_outage": 23,
+  "unsure": 13
+ },
+ "labels": [
+  {
+   "thread_key": "SR-1118242",
+   "subject": "ALERT! Unscheduled Outage: SR-1118242 - Emergency Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:steam leak in bio basement",
+   "subject": "Re: Steam leak in BIO basement",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1116801",
+   "subject": "Approval is required for an Outage Request: SR-1116801 - Scheduled Outage.",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1114747",
+   "subject": "ALERT! Unscheduled Outage: SR-1114747 - Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:abl third floor - cable transfer",
+   "subject": "Re: ABL Third Floor - Cable Transfer",
+   "label": "unsure"
+  },
+  {
+   "thread_key": "SR-1114720",
+   "subject": "Approval is required for an Outage Request: SR-1114720 - Scheduled Outage.",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1114002",
+   "subject": "ALERT! Unscheduled Outage: SR-1114002 - Emergency Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:keck and abl power outages this week",
+   "subject": "Re: Keck and ABL power outages this week",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1113773",
+   "subject": "Re: sept. 17 and 18 power outages",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:mda biology - in wall conduits",
+   "subject": "Re: MDA Biology - In wall Conduits",
+   "label": "unsure"
+  },
+  {
+   "thread_key": "SR-1110692",
+   "subject": "Notification of Planned Outage: SR-1110692 - Scheduled Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:network maintenance at brc scheduled for monday, 8/17 at 5am",
+   "subject": "[BRC Tenants] Network Maintenance at BRC Scheduled for Monday, 8/17 at 5AM",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1100791",
+   "subject": "Notification of Planned Outage: SR-1100791 - Scheduled Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:m.d. anderson biology outage",
+   "subject": "Re: M.D. Anderson Biology Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1092785",
+   "subject": "Notification of Planned Outage: SR-1092785 - Scheduled Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: heating hot water outage",
+   "subject": "[BRC Tenants] NOTIFICATION: Heating Hot Water Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1119169",
+   "subject": "Approval is required for an Outage Request: SR-1119169 - Scheduled Outage.",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: vivarium exhaust system outage",
+   "subject": "[BRC Tenants] NOTIFICATION: Vivarium Exhaust System Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:building notification - brief power interruption",
+   "subject": "[BRC Tenants] Building Notification - Brief Power Interruption",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:building notification: 2nd floor hallway door installation - upcoming construction",
+   "subject": "[BRC Tenants] BUILDING NOTIFICATION: 2nd Floor Hallway Door Installation - Upcoming Construction",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:brc research building ? house nitrogen and lab maintenance reminder",
+   "subject": "[BRC Tenants] BRC Research Building ? House Nitrogen and Lab Maintenance Reminder",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:brc closed to public - labor day holiday on monday, sept. 7",
+   "subject": "[BRC Tenants] BRC Closed to Public - Labor Day Holiday on Monday, Sept. 7",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:busy brc parking garage- tomorrow, aug. 26",
+   "subject": "[BRC Tenants] Busy BRC Parking Garage- Tomorrow, Aug. 26",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:notification: temporary chiller outage affecting brc",
+   "subject": "[BRC Tenants] NOTIFICATION: Temporary Chiller Outage Affecting BRC",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:emergency steam outage on tuesday, july 21st - no autoclaves!",
+   "subject": "[BRC Tenants] Emergency Steam Outage on Tuesday, July 21st - No Autoclaves!",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:brc patio renovation work on friday, july 24",
+   "subject": "[BRC Tenants] BRC Patio Renovation Work on Friday, July 24",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:notification: freight elevator out of service",
+   "subject": "[BRC Tenants] NOTIFICATION: Freight Elevator out of service",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: nitrogen service outage 7-6-26",
+   "subject": "[BRC Tenants] NOTIFICATION: Nitrogen Service Outage 7-6-26",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:brc closed to public for independence day holiday - july 3",
+   "subject": "[BRC Tenants] BRC Closed to Public for Independence Day Holiday - July 3",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:notification: elevator service update 6-22-26",
+   "subject": "[BRC Tenants] NOTIFICATION: Elevator Service Update 6-22-26",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: fire pump run 6-12-26",
+   "subject": "[BRC Tenants] Notification: Fire Pump Run 6-12-26",
+   "label": "unsure"
+  },
+  {
+   "thread_key": "subj:brc closed to public for memorial day holiday",
+   "subject": "[BRC Tenants] BRC Closed to Public for Memorial Day Holiday",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:notification: fire pump run 5/15/26",
+   "subject": "[BRC Tenants] NOTIFICATION: Fire Pump Run 5/15/26",
+   "label": "unsure"
+  },
+  {
+   "thread_key": "subj:graduate student feedback needed! - short survey",
+   "subject": "[BRC Tenants] Graduate Student Feedback Needed! - Short survey",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:update - notification: freight back in service",
+   "subject": "[BRC Tenants] UPDATE - NOTIFICATION: Freight Back in Service",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: freight elevator temporary service interruption",
+   "subject": "[BRC Tenants] NOTIFICATION: Freight Elevator Temporary Service Interruption",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: scheduled electrical shutdown - level 9 (may 6, 7:00-8:00 am)",
+   "subject": "[BRC Tenants] NOTIFICATION: Scheduled Electrical Shutdown - Level 9 (May 6, 7:00-8:00 AM)",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:update: power interruption - systems restored",
+   "subject": "[BRC Tenants] Update: Power Interruption - Systems Restored",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:brief power interruption - service restored",
+   "subject": "[BRC Tenants] Brief Power Interruption - Service Restored",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: temporary closure notice - stairwell d (floors 8 & 9) for air balancing work",
+   "subject": "[BRC Tenants] NOTIFICATION: Temporary Closure Notice - Stairwell D (Floors 8 & 9) for Air Balancing Work",
+   "label": "unsure"
+  },
+  {
+   "thread_key": "subj:reminder - notification: brc parking elevator shutdown",
+   "subject": "[BRC Tenants] REMINDER - NOTIFICATION: BRC Parking Elevator Shutdown",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: brc parking elevator shutdown",
+   "subject": "[BRC Tenants] NOTIFICATION: BRC Parking Elevator Shutdown",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:important safety notice - steam sterilizer use",
+   "subject": "[BRC Tenants] Important Safety Notice - Steam Sterilizer Use",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:notification: utility outage rescheduled to saturday april 4th",
+   "subject": "[BRC Tenants] NOTIFICATION: Utility Outage Rescheduled to Saturday April 4th",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: scheduled garage elevator maintenance - saturday, march 28",
+   "subject": "[BRC Tenants] NOTIFICATION: Scheduled Garage Elevator Maintenance - Saturday, March 28",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:reminder notification: utility outage on saturday the 21st",
+   "subject": "[BRC Tenants] REMINDER NOTIFICATION: Utility Outage on Saturday\tthe 21st",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: rescheduled utility outage on saturday the 21st",
+   "subject": "[BRC Tenants] NOTIFICATION: RESCHEDULED Utility Outage on Saturday the 21st",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:reminder notification: brc parking elevator shutdown",
+   "subject": "[BRC Tenants] REMINDER NOTIFICATION: BRC Parking Elevator Shutdown",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: utility outage on saturday, the 14th",
+   "subject": "[BRC Tenants] NOTIFICATION: Utility Outage on Saturday, the 14th",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: garage elevator fire alarm testing",
+   "subject": "[BRC Tenants] NOTIFICATION: Garage Elevator Fire Alarm Testing",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: spare -80 freezer maintenance",
+   "subject": "[BRC Tenants] NOTIFICATION: Spare -80 Freezer Maintenance",
+   "label": "unsure"
+  },
+  {
+   "thread_key": "subj:reminder: busy brc parking garage this week - feb. 24-26",
+   "subject": "[BRC Tenants] REMINDER: Busy BRC Parking Garage THIS WEEK - Feb. 24-26",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:notification: urgent electrical outage feb 21",
+   "subject": "[BRC Tenants] NOTIFICATION: Urgent Electrical Outage Feb 21",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:busy brc parking garage next week - february 24-26",
+   "subject": "[BRC Tenants] Busy BRC Parking Garage next week - February 24-26",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:reminder - notification: fire drill 2/19",
+   "subject": "[BRC Tenants] REMINDER - NOTIFICATION: Fire Drill 2/19",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:building notification: fire alarm & device testing - february 18-19, 2026",
+   "subject": "[BRC Tenants] Building Notification: Fire Alarm & Device Testing - February 18-19, 2026",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: rescheduled - fire drill 2/19",
+   "subject": "[BRC Tenants] NOTIFICATION: RESCHEDULED - Fire Drill 2/19",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:card readers issues @ brc",
+   "subject": "[BRC Tenants] Card Readers Issues @ BRC",
+   "label": "unsure"
+  },
+  {
+   "thread_key": "subj:notification: planned hvac outage - saturday, february 21 (6:00 am-12:00 pm)",
+   "subject": "[BRC Tenants] NOTIFICATION: Planned HVAC Outage - Saturday, February 21 (6:00 AM-12:00 PM)",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:recall: notification: planned hvac outage – saturday, february 21 (6:00 am–12:00 pm)",
+   "subject": "[BRC Tenants] Recall: NOTIFICATION: Planned HVAC Outage – Saturday, February 21 (6:00 AM–12:00 PM)",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: fire drill 2/27",
+   "subject": "[BRC Tenants] NOTIFICATION: Fire Drill 2/27",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:reminder - notification: scheduled electrical outage - 9th floor, january 29",
+   "subject": "[BRC Tenants] REMINDER - NOTIFICATION: Scheduled Electrical Outage - 9th Floor, January 29",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: pump run 2/3",
+   "subject": "[BRC Tenants] NOTIFICATION: Pump Run 2/3",
+   "label": "unsure"
+  },
+  {
+   "thread_key": "subj:brc partial steam outage - tuesday, january 27th",
+   "subject": "[BRC Tenants] BRC Partial Steam Outage - Tuesday, January 27th",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:update: lab vacuum outage rescheduled",
+   "subject": "[BRC Tenants] Update: Lab Vacuum Outage Rescheduled",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:reminder notification: brc parking elevator bank shutdown",
+   "subject": "[BRC Tenants] REMINDER NOTIFICATION: BRC Parking Elevator Bank Shutdown",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: scheduled building-wide lab vacuum outage - january 24",
+   "subject": "[BRC Tenants] NOTIFICATION: Scheduled Building-Wide Lab Vacuum Outage - January 24",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: scheduled electrical outage - 9th floor | january 29",
+   "subject": "[BRC Tenants] NOTIFICATION: Scheduled Electrical Outage - 9th Floor | January 29",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: brc parking elevator bank shutdown",
+   "subject": "[BRC Tenants] NOTIFICATION: BRC Parking Elevator bank shutdown",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:brc closed to public for mlk holiday - monday, jan. 19",
+   "subject": "[BRC Tenants] BRC Closed to Public for MLK Holiday - Monday, Jan. 19",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:notification: temporary co₂ outage in building",
+   "subject": "[BRC Tenants] NOTIFICATION: Temporary CO₂ Outage in Building",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1092062",
+   "subject": "ALERT! Unscheduled Outage: SR-1092062 - Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1091841",
+   "subject": "ALERT! Unscheduled Outage: SR-1091841 - Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification - update: boil water noticed",
+   "subject": "[BRC Tenants] NOTIFICATION - Update: Boil Water Noticed",
+   "label": "unsure"
+  },
+  {
+   "thread_key": "subj:reminder - notification: scheduled hvac & chemical exhaust outages - saturday, dec. 6 (6-10 a.m.)",
+   "subject": "[BRC Tenants] REMINDER - NOTIFICATION: Scheduled HVAC & Chemical Exhaust Outages - Saturday, Dec. 6 (6-10 a.m.)",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: pump run 11/20",
+   "subject": "[BRC Tenants] NOTIFICATION: Pump Run 11/20",
+   "label": "unsure"
+  },
+  {
+   "thread_key": "subj:notification: lab air outage",
+   "subject": "[BRC Tenants] NOTIFICATION: Lab Air Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:brc closed to public for thanksgiving holiday 2025",
+   "subject": "[BRC Tenants] BRC Closed to Public for Thanksgiving Holiday 2025",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:notification: scheduled hvac & chemical exhaust outages - saturday, dec. 6 (6-10 a.m.)",
+   "subject": "[BRC Tenants] NOTIFICATION: Scheduled HVAC & Chemical Exhaust Outages - Saturday, Dec. 6 (6-10 a.m.)",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:reminder - notification: building hvac outage",
+   "subject": "[BRC Tenants] REMINDER - NOTIFICATION: Building HVAC Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:reminder - notification: rescheduled emergency lab air outage - saturday, november 15",
+   "subject": "[BRC Tenants] REMINDER - NOTIFICATION: Rescheduled Emergency Lab Air Outage -\tSaturday, November 15",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notification: building hvac outage",
+   "subject": "[BRC Tenants] NOTIFICATION: Building HVAC Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:reminder - notification: scheduled building-wide steam outage - october 24-25, 2025",
+   "subject": "[BRC Tenants] REMINDER - NOTIFICATION: Scheduled Building-Wide Steam Outage - October 24-25, 2025",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1085910",
+   "subject": "Re: BRC OUTAGE Contacts need to be added.",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:welcome to the \"brcresidents\" mailing list",
+   "subject": "Welcome to the \"BRCResidents\" mailing list",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:elevator maintenance for brockman",
+   "subject": "Re: Elevator maintenance for Brockman",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:supply air partly offline in brk after power glitch",
+   "subject": "Re: Supply air partly offline in BRK after power glitch",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:elevator shutdown",
+   "subject": "Re: elevator shutdown",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:brockman labs: chilled water connection check & consumption",
+   "subject": "Re: Brockman labs: chilled water connection check & consumption",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:brk elevator maintenance",
+   "subject": "BRK Elevator Maintenance",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:brockman: re: elevator maintenance for brockman",
+   "subject": "Re: BROCKMAN: Re: Elevator maintenance for Brockman",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:brk process chilled water outage",
+   "subject": "Re: BRK Process chilled water outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1116859",
+   "subject": "Your request for Service Request (SR-1116859-0) was completed",
+   "label": "unsure"
+  },
+  {
+   "thread_key": "SR-1114719",
+   "subject": "ALERT! Unscheduled Outage: SR-1114719 - Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:outage at brokman physics",
+   "subject": "Re: Outage at Brokman Physics",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:air handler preventive maintenance",
+   "subject": "Re: Air handler Preventive Maintenance",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:what times work best for brk b12 humidity sensor installation?",
+   "subject": "Re: What Times Work Best for BRK B12 Humidity Sensor Installation?",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:don't forget, friendly reminder: re: brk basement labs: temp & humidity survey",
+   "subject": "Fwd: Don't Forget, Friendly Reminder: Re: BRK Basement Labs: Temp & Humidity Survey",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "SR-1100319",
+   "subject": "Re: ALERT! Unscheduled Outage: SR-1100319 - Emergency Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1100268",
+   "subject": "Your request for Evening Task (SR-1100268) has been assigned",
+   "label": "unsure"
+  },
+  {
+   "thread_key": "subj:hvac outage update",
+   "subject": "HVAC Outage update",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1099839",
+   "subject": "RE: Fwd: [FANDE] ALERT! Unscheduled Outage: SR-1099839 - Emergency Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:terrible noise in brk basement men’s room",
+   "subject": "Terrible noise in BRK basement men’s room",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "SR-1094939",
+   "subject": "Re: Reschedule, please advise: Re: Approval is required for an Outage Request: SR-1094939 - Scheduled Outage.",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1096999",
+   "subject": "Notification of Planned Outage: SR-1096999 - Scheduled Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:brockman 3rd floor electrical shutdown",
+   "subject": "Re: Brockman 3rd floor electrical shutdown",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:brockman electrical outage coordination",
+   "subject": "Re: Brockman Electrical outage coordination",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:item shared with you: \"drone crash from a couple of weeks ago in greenbriar west lot.mp4\"",
+   "subject": "Item shared with you: \"drone crash from a couple of weeks ago in greenbriar west lot.mp4\"",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:item shared with you: \"drone in aston martin.png\"",
+   "subject": "Item shared with you: \"drone in aston martin.png\"",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:item shared with you: \"drone crash december.mp4\"",
+   "subject": "Item shared with you: \"drone crash december.mp4\"",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:brockman 350 shut down.",
+   "subject": "Re: Brockman 350 shut down.",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:reminder - notification: planned hvac outage - saturday, february 21 (6:00 am-12:00 pm)",
+   "subject": "[BRC Tenants] REMINDER - NOTIFICATION: Planned HVAC Outage - Saturday, February 21 (6:00 AM-12:00 PM)",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:smoke coming out of ac",
+   "subject": "Re: Smoke coming out of AC",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:humidification in brk - clouds of steam?",
+   "subject": "Re: Humidification in BRK - clouds of steam?",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1092786",
+   "subject": "Notification of Planned Outage: SR-1092786 - Scheduled Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:qs about brk",
+   "subject": "qs about BRK",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1092008",
+   "subject": "Re: Urgent, please advise BRK 360: Re: Approval is required for an Outage Request: SR-1092008 - Urgent Outage.",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:dell butcher secondary chilled water system issues",
+   "subject": "Dell Butcher secondary chilled water system issues",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1114722",
+   "subject": "Approval is required for an Outage Request: SR-1114722 - Scheduled Outage.",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:dbh steam leak in autoclave room 110",
+   "subject": "DBH steam leak in autoclave room 110",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1111099",
+   "subject": "ALERT! Unscheduled Outage: SR-1111099 - Emergency Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:thanks for accepting our proposal",
+   "subject": "RE: Thanks for accepting our proposal",
+   "label": "not_outage"
+  },
+  {
+   "thread_key": "subj:dbh 160 low compressed gas pressure",
+   "subject": "Re: DBH 160 low compressed gas pressure",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1097751",
+   "subject": "Notification of Planned Outage: SR-1097751 - Scheduled Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1098635",
+   "subject": "ALERT! Unscheduled Outage: SR-1098635 - Emergency Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:outage at dell butcher",
+   "subject": "Re: Outage at Dell Butcher",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:follow up",
+   "subject": "RE: Follow up",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:fyi - dell butcher, march 20",
+   "subject": "Re: fyi - Dell Butcher, March 20",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1098421",
+   "subject": "ALERT! Unscheduled Outage: SR-1098421 - Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:timely: request to schedule network maintenance for dell butcher hall",
+   "subject": "TIMELY: Request to Schedule Network Maintenance for Dell Butcher Hall",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:grb east elevator is out of order.",
+   "subject": "Re: GRB East elevator is out of order.",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:ac in hbh",
+   "subject": "Re: AC in HBH",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1109612",
+   "subject": "RE: AC maintenance issues",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1109854",
+   "subject": "ALERT! Unscheduled Outage: SR-1109854 - Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:herman brown urgent outage",
+   "subject": "Re: Herman Brown Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:herman brown fire alarm audible testing 7/21",
+   "subject": "Re: Herman Brown fire alarm audible testing 7/21",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1098492",
+   "subject": "ALERT! Unscheduled Outage: SR-1098492 - Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:outage",
+   "subject": "Re: Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:hbh hot water heater, please advise.",
+   "subject": "Re: HBH hot water heater, please advise.",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:winter weekends at herman brown",
+   "subject": "Re: Winter Weekends at Herman Brown",
+   "label": "unsure"
+  },
+  {
+   "thread_key": "subj:temperature in hbh",
+   "subject": "Re: Temperature in HBH",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:hbh cold temps.",
+   "subject": "Re: HBH cold temps.",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:keck: re: elevator maintenance for keck",
+   "subject": "KECK: Re: Elevator maintenance for Keck",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:geology elevator pit modifications.",
+   "subject": "Geology elevator pit modifications.",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:geology fire alarm testing 7/21",
+   "subject": "Re: Geology fire alarm testing 7/21",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1105856",
+   "subject": "Notification of Planned Outage: SR-1105856 - Scheduled Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:keith wiess outage",
+   "subject": "Keith Wiess Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1105761",
+   "subject": "Critical Electrical Outage for Keith-Wiess Geology",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1097755",
+   "subject": "Notification of Planned Outage: SR-1097755 - Scheduled Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:scheduled outage",
+   "subject": "Re: Scheduled Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1097849",
+   "subject": "ALERT! Unscheduled Outage: SR-1097849 - Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1097802",
+   "subject": "ALERT! Unscheduled Outage: SR-1097802 - Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:keith wiess urgent outage",
+   "subject": "Re: Keith Wiess Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1092816",
+   "subject": "ALERT! Unscheduled Outage: SR-1092816 - Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:potential water outage friday 1-16",
+   "subject": "Potential Water Outage Friday 1-16",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1119085",
+   "subject": "Notification of Planned Outage: SR-1119085 - Scheduled Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1116803",
+   "subject": "Notification of Planned Outage: SR-1116803 - Scheduled Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:space science: elevator out of service",
+   "subject": "Re: Space Science: Elevator Out of Service",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:sst elevator - out of service",
+   "subject": "Re: SST Elevator - Out of Service",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1114769",
+   "subject": "ALERT! Unscheduled Outage: SR-1114769 - Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:compressed air outage sst upper floors",
+   "subject": "Re: Compressed air outage SST upper floors",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1114004",
+   "subject": "ALERT! Unscheduled Outage: SR-1114004 - Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1110690",
+   "subject": "Notification of Planned Outage: SR-1110690 - Scheduled Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1110266",
+   "subject": "ALERT! Unscheduled Outage: SR-1110266 - Urgent Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:notice - sst: ahu 2-2 is not functioning",
+   "subject": "Re: Urgent Notice - SST: AHU 2-2 is not functioning",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1102409",
+   "subject": "Notification of Planned Outage: SR-1102409 - Scheduled Outage",
+   "label": "outage"
+  },
+  {
+   "thread_key": "subj:outage at space science",
+   "subject": "Outage at Space Science",
+   "label": "outage"
+  },
+  {
+   "thread_key": "SR-1092783",
+   "subject": "Notification of Planned Outage: SR-1092783 - Scheduled Outage",
+   "label": "outage"
+  }
+ ]
+}

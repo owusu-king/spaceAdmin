@@ -30,6 +30,8 @@ PEOPLE_FILE = SOURCE_DIR / "Report_PeopleRecords.xlsx"
 FLOOR_PLAN_DIRS = [SOURCE_DIR / "May 2026", SOURCE_DIR / "November 2026"]
 # Case database. FAI_DB_PATH lets a second copy of the app (e.g. for testing) use its own database.
 DB_PATH = Path(os.environ["FAI_DB_PATH"]) if os.environ.get("FAI_DB_PATH") else DATA_DIR / "facilities.db"
+# Calendar (events and blocked times) lives beside it: a test copy gets its own calendar too.
+EVENTS_DB_PATH = DB_PATH.with_name(f"{DB_PATH.stem}-events.db") if os.environ.get("FAI_DB_PATH") else DATA_DIR / "events.db"
 
 SEED = 42
 

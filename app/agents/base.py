@@ -21,10 +21,10 @@ from app.logging_setup import current_run_id, get_logger, kv
 
 EVIDENCE_CLASSES = ("confirmed", "recorded", "inferred", "historical", "conflicting", "unknown")
 LOCKED_ACTIONS = {
-    "send_email": "Sending requires institutional email integration (Level 4). Not enabled.",
-    "write_tririga": "Writing TRIRIGA records requires authorized integration. Not enabled.",
-    "assign_space": "Space assignment is an institutional decision. The agent prepares a recommendation only.",
-    "approve_outage": "Outage approval belongs to the formal approver in TRIRIGA.",
+    "send_email": "Agents cannot send email.",
+    "write_tririga": "Agents cannot write to TRIRIGA.",
+    "assign_space": "Agents cannot assign space.",
+    "approve_outage": "Agents cannot approve outages.",
 }
 
 

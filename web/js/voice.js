@@ -1,14 +1,15 @@
 // Conversation with the Space agent: the main way to make a space request (the form is the alternative).
 // Hands-free: the microphone listens from the moment the conversation opens; just talk, and talking while the
-// assistant speaks interrupts it. The mic icon mutes and unmutes. A small avatar shows who is talking.
+// assistant speaks interrupts it. The mic icon mutes and unmutes. A 3D head (avatar3d.js) speaks the replies; the flat
+// avatar shows until it has loaded, and stays if this computer cannot draw 3D.
 // Everything runs on this computer (app/voice/).
 import { api, esc, fmtNum, icon } from "./lib.js";
 
 const SAY = {
-  idle: "Microphone off · type, or turn the mic on", connecting: "Getting ready…", loading: "Getting ready…",
-  listening: "Listening · just speak", hearing: "Hearing you…", transcribing: "Got it", thinking: "Thinking…",
-  searching: "Searching the records…", speaking: "Speaking · talk to interrupt", paused: "Paused",
-  nomic: "Microphone unavailable · type below", closed: "Disconnected · reopen to start again",
+  idle: "Muted", connecting: "Getting ready…", loading: "Getting ready…",
+  listening: "Listening", hearing: "Hearing you…", transcribing: "Got it", thinking: "Thinking…",
+  searching: "Searching the records…", speaking: "Speaking", paused: "Paused",
+  nomic: "No microphone", closed: "Disconnected",
 };
 export const SLOT_LABEL = { request_type: "Type", function: "Function", department: "Department", near_name: "Close to",
   min_area: "Min. area", seats: "Seats", preferred_buildings: "Buildings", exclude_buildings: "Not in" };
@@ -24,17 +25,18 @@ const AVATAR = `<svg viewBox="0 0 120 120" aria-hidden="true">
 export async function conversationAvailable() {
   try {
     const opts = await api("/voice/options");
-    if (!opts.enabled) return { ok: false, why: "The voice assistant is switched off in Settings.", opts };
-    if (!opts.ready) return { ok: false, why: opts.problems[0] || "The local models are not ready.", opts };
+    if (!opts.enabled) return { ok: false, why: "Voice is off in Settings.", opts };
+    if (!opts.ready) return { ok: false, why: opts.problems[0] || "Models not ready.", opts };
     return { ok: true, opts };
   } catch (e) { return { ok: false, why: e.message }; }
 }
 
 /** Mounts into `root`. Callbacks: onChange({slots, canSave}) after each reply, onSaved(caseId). */
 export class Conversation {
-  constructor(root, opts, { onChange, onSaved } = {}) {
-    Object.assign(this, { root, opts, onChange, onSaved });
+  constructor(root, opts, { onChange, onSaved, onError } = {}) {
+    Object.assign(this, { root, opts, onChange, onSaved, onError });
     this.minTurn = 0; this.sources = new Set(); this.next = 0;
+    this.pending = []; this.jobs = []; this.nextSpeech = null;      // reply words waiting for their audio
     this.listening = false; this.paused = false; this.state = "connecting";
     this.slots = {}; this.canSave = false;
   }
@@ -43,14 +45,14 @@ export class Conversation {
     this.root.innerHTML = `
       <div class="vx-stage">
         <div class="vx-avatar" data-state="idle">${AVATAR}</div>
-        <div class="vx-say"><b></b><span>${esc(this.opts.selected.voice_llm)} · runs on this computer</span></div>
+        <div class="vx-say"><b></b><span>${esc(this.opts.selected.voice_llm)}</span></div>
       </div>
       <div class="vx-scroll">
-        <div class="vx-log"><p class="vx-empty">Try: “An office near Professor Bartel, at least 120 square feet.”</p></div>
+        <div class="vx-log"><p class="vx-empty">Try: “An office near Professor Bartel.”</p></div>
         <div class="vx-result"></div>
       </div>
       <form class="vx-composer"><div class="vx-field">
-        <input placeholder="Describe the space you need…" autocomplete="off" aria-label="Message to the Space agent">
+        <input placeholder="Describe the space…" autocomplete="off" aria-label="Message to the Space agent">
         <button type="button" class="vx-icon vx-mic" aria-pressed="false" aria-label="Tap to speak" title="Speak">${icon("mic")}</button>
         <button type="button" class="vx-icon vx-send" aria-label="Send" title="Send" disabled>${icon("send")}</button>
       </div></form>`;
@@ -72,6 +74,16 @@ export class Conversation {
     };
     this.connect();
     this.animate();
+    this.load3d();
+  }
+
+  /** The 3D head loads in the background so the conversation opens at once; on failure the flat avatar stays. */
+  load3d() {
+    const host = this.$(".vx-avatar");
+    import("./avatar3d.js")
+      .then(m => m.createAvatar(host))
+      .then(a => { if (this.closed) return a.dispose(); this.avatar = a; host.classList.add("is-3d"); })
+      .catch(e => console.info("3D avatar unavailable; using the flat one.", e && e.message));
   }
 
   /** Pause (e.g. while the form tab is shown) or resume. */
@@ -97,23 +109,27 @@ export class Conversation {
   onJson(m) {
     if (m.type === "status") {
       const st = (m.state === "listening" || m.state === "idle") ? "listening" : m.state;
+      if (st === "listening") this.flushWords();
       if (!this.paused) this.show(st);
     }
     else if (m.type === "transcript") this.bubble("me", m.text);
     else if (m.type === "say") this.sayText(m.turn, m.text);
+    else if (m.type === "speech") this.onSpeech(m);
     else if (m.type === "reply") this.reply(m);
     else if (m.type === "interrupt") { this.minTurn = m.turn; this.stopAudio(); this.cur = null; }
     else if (m.type === "step") this.step(m.turn, m.text);
     else if (m.type === "saved") this.saved(m.case_id, m.via);
-    else if (m.type === "error") this.bubble("err", m.message);
+    else if (m.type === "error") { this.bubble("err", m.message); this.onError && this.onError(m.message); }
   }
 
   // -------------------------------------------------------------------- microphone: hands-free, the icon mutes
   async toggleMic() {
     if (this.closed) return;
-    if (this.listening) {                                            // mute
+    if (this.listening) {                                            // mute: text only, no spoken replies
       this.listening = false;
       this.stream && this.stream.getAudioTracks().forEach(t => t.enabled = false);
+      this.stopAudio();
+      this.send({ type: "mic_mute" });
       this.micButton(); this.show("listening");
       return;
     }
@@ -140,6 +156,7 @@ export class Conversation {
       return true;
     } catch (e) {
       this.stream = null; this.listening = false;
+      this.send({ type: "mic_mute" });                               // no microphone: text replies only
       this.show("nomic");
       this.$(".vx-mic").disabled = true;
       return false;
@@ -157,7 +174,7 @@ export class Conversation {
   // -------------------------------------------------------------------- playback (24 kHz PCM, one sentence per message)
   onAudio(buf) {
     const turn = new DataView(buf).getUint32(0, true);
-    if (turn < this.minTurn || this.paused) return;                 // interrupted or paused: drop stale speech
+    if (turn < this.minTurn || this.paused) { this.flushWords(); return; }   // interrupted or paused: drop stale speech
     const pcm = new Int16Array(buf, 4);
     if (!this.outCtx) {
       this.outCtx = new AudioContext();
@@ -170,7 +187,16 @@ export class Conversation {
     const s = this.outCtx.createBufferSource();
     s.buffer = ab; s.connect(this.outMeter);
     this.next = Math.max(this.next, this.outCtx.currentTime + 0.05);
-    s.start(this.next); this.next += ab.duration;
+    s.start(this.next);
+    const sp = this.nextSpeech; this.nextSpeech = null;             // its words appear as they are spoken
+    if (sp) {
+      const words = sp.text.split(/\s+/), base = sp.e.assigned;
+      sp.e.assigned = `${base} ${sp.text}`.trim();
+      const total = words.reduce((a, w) => a + w.length + 1, 0);
+      let c = 0; const starts = words.map(w => { const at = c / total; c += w.length + 1; return at; });
+      this.jobs.push({ e: sp.e, base, words, starts, t0: this.next, dur: ab.duration });
+    }
+    this.next += ab.duration;
     this.sources.add(s);
     s.onended = () => { this.sources.delete(s); if (!this.sources.size) this.send({ type: "played" }); };
   }
@@ -178,14 +204,50 @@ export class Conversation {
     this.sources.forEach(s => { s.onended = null; try { s.stop(); } catch { /* already stopped */ } });
     if (this.sources.size) this.send({ type: "played" });
     this.sources.clear(); this.next = 0;
+    this.flushWords();
     this.updateAction();
+  }
+
+  // -------------------------------------------------------------------- reply words in step with the voice
+  /** With voice replies, each sentence takes its place in the conversation at once and its words appear as they
+   *  are spoken. Typed-only replies, interruptions and failed speech show the text straight away. */
+  get spoken() { return this.listening && !this.paused && this.state !== "nomic"; }
+  reveal(e, text) {
+    if (e.span.textContent === text) return;
+    e.span.textContent = text;
+    if (text) e.bubble.classList.remove("is-waiting");
+    this.scroll();
+  }
+  flushWords() {
+    this.pending.forEach(e => this.reveal(e, e.text));
+    this.pending = []; this.jobs = []; this.nextSpeech = null;
+  }
+  onSpeech(m) {
+    const text = m.text.trim();
+    const e = this.pending.find(x => x.turn === m.turn && x.text.slice(x.assigned.length).trim().startsWith(text))
+      || this.pending.find(x => x.turn === m.turn && x.assigned.length < x.text.length);
+    if (!e) return;
+    if (m.audio) { this.nextSpeech = { e, text }; return; }
+    e.assigned = `${e.assigned} ${text}`.trim();                    // no audio for this piece: show it now
+    this.reveal(e, e.assigned);
+  }
+  stepWords() {
+    if (!this.jobs.length || !this.outCtx) return;
+    const now = this.outCtx.currentTime;
+    this.jobs = this.jobs.filter(j => {
+      const p = (now - j.t0) / j.dur;
+      if (p < 0) return true;
+      const k = p >= 1 ? j.words.length : j.starts.filter(x => x <= p).length;
+      this.reveal(j.e, `${j.base} ${j.words.slice(0, k).join(" ")}`.trim());
+      return p < 1;
+    });
   }
 
   // -------------------------------------------------------------------- avatar: mouth follows the voice, halo follows the mic
   animate() {
     const buf = new Float32Array(512);
     const level = meter => { if (!meter) return 0; meter.getFloatTimeDomainData(buf); let s = 0; for (const v of buf) s += v * v; return Math.sqrt(s / buf.length); };
-    let mouth = 4, halo = 1;
+    let mouth = 4, halo = 1, lvl = 0;
     const tick = () => {
       if (this.closed) return;
       const talking = this.sources.size > 0;
@@ -198,8 +260,18 @@ export class Conversation {
       if (m) { m.setAttribute("height", mouth.toFixed(1)); m.setAttribute("y", (74 - mouth / 2).toFixed(1)); }
       if (h) h.style.transform = `scale(${halo.toFixed(3)})`;
       const av = this.$(".vx-avatar");
-      if (av) av.dataset.state = talking ? "speaking" : ["thinking", "searching", "transcribing", "connecting", "loading"].includes(this.state)
+      const state = talking ? "speaking" : ["thinking", "searching", "transcribing", "connecting", "loading"].includes(this.state)
         ? "thinking" : live ? "listening" : "idle";
+      if (av) { av.dataset.state = state; av.style.setProperty("--mic", mic.toFixed(3)); }
+      const field = this.$(".vx-field");                               // the field's edge lights up while you speak
+      if (field) {
+        const speaking = live && (this.state === "hearing" || mic > 0.12);
+        lvl += ((speaking ? mic : 0) - lvl) * (speaking ? 0.25 : 0.12);  // smoothed: breathes, never flickers
+        field.classList.toggle("is-speaking", speaking);
+        field.style.setProperty("--lvl", lvl.toFixed(3));
+      }
+      if (this.avatar) this.avatar.update({ state, speech: this.outMeter, talking, mic });
+      this.stepWords();
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -237,9 +309,16 @@ export class Conversation {
   }
   sayText(turn, text) {
     if (turn < this.minTurn) return;
-    if (!this.cur || this.curTurn !== turn) { this.cur = this.bubble("bot", ""); this.curTurn = turn; }
-    this.cur.textContent = (this.cur.textContent + " " + text).trim();
-    this.scroll();
+    if (!this.cur || this.curTurn !== turn) {
+      this.cur = this.bubble("bot", ""); this.curTurn = turn;
+      if (this.spoken) this.cur.classList.add("is-waiting");         // hidden until its first word is spoken
+    }
+    if (this.cur.childNodes.length) this.cur.append(" ");
+    const span = document.createElement("span");
+    this.cur.append(span);
+    const e = { turn, text: text.trim(), assigned: "", span, bubble: this.cur };
+    if (this.spoken) this.pending.push(e);
+    else this.reveal(e, e.text);
   }
   /** The agent's steps, live: lead-in sentence, then this checklist, then the answer below it. */
   step(turn, text) {
@@ -260,14 +339,14 @@ export class Conversation {
     if (via === "voice") {
       const note = document.createElement("div");
       note.className = "vx-saved";
-      note.innerHTML = `${icon("check")}<span>Saved as <b class="mono">${esc(id)}</b>, ready for review</span><a href="#/cases/${esc(id)}" data-close>Open case</a>`;
+      note.innerHTML = `${icon("check")}<span>Saved as <b class="mono">${esc(id)}</b></span><a href="#/cases/${esc(id)}" data-close>Open case</a>`;
       this.$(".vx-log").appendChild(note); this.scroll();
     }
     this.onSaved && this.onSaved(id, via);
   }
 
   reply(m) {
-    if (!this.cur || this.curTurn !== m.turn) this.bubble("bot", m.text);
+    if (m.text && (!this.cur || this.curTurn !== m.turn)) this.bubble("bot", m.text);   // "okay": nothing to answer
     this.cur = null;
     this.slots = m.slots || {}; this.canSave = !!m.can_save;
     const slots = Object.entries(this.slots).filter(([k, v]) => SLOT_LABEL[k] && v !== null && !(Array.isArray(v) && !v.length));
@@ -291,5 +370,6 @@ export class Conversation {
     try { this.ws && this.ws.close(); } catch { /* ignore */ }
     this.stream && this.stream.getTracks().forEach(t => t.stop());
     this.micCtx && this.micCtx.close(); this.outCtx && this.outCtx.close();
+    this.avatar && this.avatar.dispose(); this.avatar = null;
   }
 }

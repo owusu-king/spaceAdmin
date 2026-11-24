@@ -46,9 +46,13 @@ class OllamaChat:
     def __init__(self, model: str, timeout: float = 120.0) -> None:
         self.model, self.timeout = model, timeout
 
-    def _body(self, messages: list[dict], **extra) -> dict:
-        return {"model": self.model, "messages": messages, "think": False, "keep_alive": "30m",
-                "options": {"temperature": 0.2, "num_ctx": 8192}, **extra}
+    # Every request must use the same load options (context size): a different num_ctx makes Ollama reload the model.
+    OPTIONS = {"temperature": 0.2, "num_ctx": 8192}
+    KEEP_ALIVE = "2h"          # stay loaded between conversations; Ollama frees the memory after two idle hours
+
+    def _body(self, messages: list[dict], options: dict | None = None, **extra) -> dict:
+        return {"model": self.model, "messages": messages, "think": False, "keep_alive": self.KEEP_ALIVE,
+                "options": {**self.OPTIONS, **(options or {})}, **extra}
 
     def chat_json(self, messages: list[dict], schema: dict) -> dict:
         with httpx.Client(base_url=ollama_url(), timeout=self.timeout) as c:
@@ -76,7 +80,7 @@ class OllamaChat:
         """Load the model into memory so the first spoken turn is not slow."""
         try:
             with httpx.Client(base_url=ollama_url(), timeout=self.timeout) as c:
-                c.post("/api/chat", json=self._body([{"role": "user", "content": "hi"}], stream=False,
-                                                     options={"num_predict": 1}))
+                c.post("/api/chat", json=self._body([{"role": "user", "content": "hi"}], options={"num_predict": 1},
+                                                     stream=False))
         except Exception as exc:
             log.warning(f"model warm-up failed model={self.model} error={exc!r}")

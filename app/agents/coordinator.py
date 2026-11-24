@@ -92,13 +92,13 @@ class Coordinator:
         raise ValueError(f"unknown case kind '{kind}'")
 
 
-def build_system(as_of: datetime | None = None, events: EventStore | None = None) -> Coordinator:
+def build_system(as_of: datetime | None = None, events: EventStore | None = None, ds: Dataset | None = None) -> Coordinator:
     """Load data, model and correspondence; initialize both agents.
 
     events: persistent EventStore (the API passes a file-backed one); default is an in-memory
     store seeded from the correspondence so notebooks and tests are self-contained."""
     with timed(log, "system initialized"):
-        ds = load_dataset()
+        ds = ds if ds is not None else load_dataset()
         predictor = SpacePredictor(ds.spaces)
         corpus = load_corpus()
         resolver = BuildingResolver(list(ds.spaces["building"].dropna().unique()))

@@ -1,0 +1,233 @@
+{
+ "generated": "2026-11-23T16:26:14",
+ "model": "qwen3:8b",
+ "emails": 379,
+ "by_source": {
+  "supplied": 361,
+  "synthetic": 18
+ },
+ "labels": {
+  "outage": 342,
+  "not_outage": 37
+ },
+ "strategies": {
+  "A_keywords": {
+   "precision": 0.997,
+   "recall": 0.915,
+   "f1": 0.954,
+   "accuracy": 0.921,
+   "n": 379,
+   "missed_outages": 29
+  },
+  "B_model": {
+   "precision": 0.99,
+   "recall": 0.88,
+   "f1": 0.932,
+   "accuracy": 0.884,
+   "n": 379,
+   "missed_outages": 41
+  },
+  "C_agent": {
+   "auto_decided": 350,
+   "held_for_review": 29,
+   "held_share": 0.077,
+   "on_auto_decided": {
+    "precision": 0.99,
+    "recall": 0.968,
+    "f1": 0.979,
+    "accuracy": 0.963,
+    "n": 350
+   },
+   "after_review": {
+    "precision": 0.991,
+    "recall": 0.971,
+    "f1": 0.981,
+    "accuracy": 0.966,
+    "n": 379
+   },
+   "missed_outages": 10,
+   "decided_by": {
+    "rule": 88,
+    "model": 291,
+    "keywords": 0
+   }
+  }
+ },
+ "seconds_per_email": 2.71,
+ "examples": {
+  "held": [
+   {
+    "subject": "[BRC Tenants] Important Safety Notice - Steam Sterilizer Use",
+    "truth": "not_outage",
+    "reason": "model says not an outage, but the subject suggests one: Email addresses safety concerns about equipment use, not a service interruption or outage."
+   },
+   {
+    "subject": "Re: Brockman labs: chilled water connection check & consumption",
+    "truth": "outage",
+    "reason": "model says not an outage, but the subject suggests one: Email is about checking chilled water system for leaks, not an interruption of service."
+   },
+   {
+    "subject": "Re: Brockman labs: chilled water connection check & consumption",
+    "truth": "outage",
+    "reason": "model says not an outage, but the subject suggests one: Request for equipment check related to chilled water system, not an interruption of service."
+   },
+   {
+    "subject": "Re: Brockman labs: chilled water connection check & consumption",
+    "truth": "outage",
+    "reason": "model says not an outage, but the subject suggests one: Email discusses a chilled water system check, not an interruption or outage of service."
+   },
+   {
+    "subject": "RE: BRK Process chilled water outage",
+    "truth": "outage",
+    "reason": "model says not an outage, but the subject suggests one: Email discusses scheduling a meeting, not a building service interruption."
+   },
+   {
+    "subject": "Re: BRK Process chilled water outage",
+    "truth": "outage",
+    "reason": "model says not an outage, but the subject suggests one: Email discusses scheduling a meeting related to a chilled water outage, not the outage itself."
+   },
+   {
+    "subject": "RE: BRK Process chilled water outage",
+    "truth": "outage",
+    "reason": "model says not an outage, but the subject suggests one: Email discusses coordination of meeting about system maintenance, not an outage."
+   },
+   {
+    "subject": "RE: BRK Process chilled water outage",
+    "truth": "outage",
+    "reason": "model says not an outage, but the subject suggests one: Email discusses planned maintenance and system understanding, not an active service interruption."
+   },
+   {
+    "subject": "Re: Reschedule, please advise: Re: Approval is required for an Outage Request: SR-1094939 - Schedule",
+    "truth": "outage",
+    "reason": "model says not an outage, but the subject suggests one: Email is about scheduling a meeting, not an outage or related work."
+   },
+   {
+    "subject": "Re: Reschedule, please advise: Re: Approval is required for an Outage Request: SR-1094939 - Schedule",
+    "truth": "outage",
+    "reason": "model says not an outage, but the subject suggests one: Email is about scheduling a meeting, not a building service interruption or maintenance."
+   },
+   {
+    "subject": "Re: Reschedule, please advise: Re: Approval is required for an Outage Request: SR-1094939 - Schedule",
+    "truth": "outage",
+    "reason": "model says not an outage, but the subject suggests one: Email is about scheduling a meeting, not a building service interruption or maintenance."
+   },
+   {
+    "subject": "Re: Reschedule, please advise: Re: Approval is required for an Outage Request: SR-1094939 - Schedule",
+    "truth": "outage",
+    "reason": "model says not an outage, but the subject suggests one: Email is about scheduling a meeting, not a building service interruption or outage."
+   }
+  ],
+  "agent_errors": [
+   {
+    "subject": "qs about BRK",
+    "truth": "outage",
+    "agent": "not_outage",
+    "by": "model",
+    "reason": "Email discusses heat exchanger failure and duct fog, but no service interruption or outage is mentioned."
+   },
+   {
+    "subject": "RE: Thanks for accepting our proposal",
+    "truth": "not_outage",
+    "agent": "outage",
+    "by": "model",
+    "reason": "Compressed air system outage confirmed for the building."
+   },
+   {
+    "subject": "Re: Thanks for accepting our proposal",
+    "truth": "not_outage",
+    "agent": "outage",
+    "by": "model",
+    "reason": "Compressed air system outage due to compressor issues and planned service check."
+   },
+   {
+    "subject": "Fwd: Thanks for accepting our proposal",
+    "truth": "not_outage",
+    "agent": "outage",
+    "by": "model",
+    "reason": "Compressed air system issues and equipment shutdowns indicate a service interruption."
+   },
+   {
+    "subject": "RE: Follow up",
+    "truth": "outage",
+    "agent": "not_outage",
+    "by": "model",
+    "reason": "Email discusses ductwork installation and preparation, not a service interruption or outage."
+   },
+   {
+    "subject": "RE: Follow up",
+    "truth": "outage",
+    "agent": "not_outage",
+    "by": "model",
+    "reason": "Email discusses planned ductwork installation and lab preparations, not a service interruption."
+   },
+   {
+    "subject": "Re: Follow up",
+    "truth": "outage",
+    "agent": "not_outage",
+    "by": "model",
+    "reason": "Email discusses noise assessment and follow-up, not a service interruption or building system outage."
+   },
+   {
+    "subject": "Re: Follow up",
+    "truth": "outage",
+    "agent": "not_outage",
+    "by": "model",
+    "reason": "Email discusses noise assessment and lab sound levels, not a service interruption or building system outage."
+   },
+   {
+    "subject": "Re: Follow up",
+    "truth": "outage",
+    "agent": "not_outage",
+    "by": "model",
+    "reason": "Email discusses noise report and lab parameters, not related to building services or outages."
+   },
+   {
+    "subject": "Re: Follow up",
+    "truth": "outage",
+    "agent": "not_outage",
+    "by": "model",
+    "reason": "Email discusses lab access and setup for experiments, not a service interruption or outage."
+   },
+   {
+    "subject": "Re: Herman Brown fire alarm audible testing 7/21",
+    "truth": "outage",
+    "agent": "not_outage",
+    "by": "model",
+    "reason": "Fire alarm testing is a scheduled maintenance activity, not a service interruption."
+   },
+   {
+    "subject": "Re: Herman Brown fire alarm audible testing 7/21",
+    "truth": "outage",
+    "agent": "not_outage",
+    "by": "model",
+    "reason": "Fire alarm testing is a scheduled maintenance activity, not a service interruption."
+   },
+   {
+    "subject": "Re: Herman Brown fire alarm audible testing 7/21",
+    "truth": "outage",
+    "agent": "not_outage",
+    "by": "model",
+    "reason": "Email discusses fire alarm testing, not an interruption of a building service."
+   }
+  ],
+  "keyword_misses_caught": [
+   "[BRC Tenants] UPDATE - NOTIFICATION: Freight Back in Service",
+   "[BRC Tenants] Building Notification: Fire Alarm & Device Testing - February 18-19, 2026",
+   "Re: DBH 160 low compressed gas pressure",
+   "Re: DBH 160 low compressed gas pressure",
+   "RE: Follow up",
+   "Re: fyi - Dell Butcher, March 20",
+   "fyi - Dell Butcher, March 20",
+   "Herman Brown fire alarm audible testing 7/21",
+   "Re: Temperature in HBH",
+   "Re: Temperature in HBH",
+   "Temperature in HBH",
+   "Re: HBH cold temps."
+  ]
+ },
+ "caveats": [
+  "Labels are provisional (written by the development assistant, to be confirmed by James).",
+  "Most supplied emails come from outage threads; synthetic examples are few and hand-written.",
+  "Model confidence is the model's own estimate and is not calibrated."
+ ]
+}

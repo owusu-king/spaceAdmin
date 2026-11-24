@@ -7,6 +7,7 @@ the app starts quickly after the first run.
 from __future__ import annotations
 
 import pickle
+from pathlib import Path
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -147,11 +148,17 @@ def _quality_report(spaces: pd.DataFrame, people: pd.DataFrame) -> dict:
     }
 
 
-def load_dataset(use_cache: bool = True) -> Dataset:
-    for f in (SPACE_FILE, PEOPLE_FILE):
+def load_dataset(use_cache: bool = True, space_file=None, people_file=None, write_cache: bool = True) -> Dataset:
+    """Load and validate the records. By default the active version (newest accepted snapshot from the records
+    pipeline, else the original exports in datares/); explicit files are used to validate a new version."""
+    if space_file is None or people_file is None:
+        from app.data.records import active_files
+        space_file, people_file = active_files()
+    space_file, people_file = Path(space_file), Path(people_file)
+    for f in (space_file, people_file):
         if not f.exists():
             raise FileNotFoundError(f"Source file not found: {f}")
-    stamp = (CACHE_VERSION, SPACE_FILE.stat().st_mtime, PEOPLE_FILE.stat().st_mtime)
+    stamp = (CACHE_VERSION, str(space_file), space_file.stat().st_mtime, str(people_file), people_file.stat().st_mtime)
     cache = DATA_DIR / "dataset_cache.pkl"
     if use_cache and cache.exists():
         with cache.open("rb") as fh:
@@ -160,11 +167,13 @@ def load_dataset(use_cache: bool = True) -> Dataset:
             log.info(f"dataset loaded from cache spaces={len(cached['ds'].spaces)} people={len(cached['ds'].people)}")
             return cached["ds"]
     with timed(log, "dataset loaded from source"):
-        spaces = normalize_spaces(pd.read_excel(SPACE_FILE, dtype=str))
-        people = normalize_people(pd.read_excel(PEOPLE_FILE, dtype=str))
+        spaces = normalize_spaces(pd.read_excel(space_file, dtype=str))
+        people = normalize_people(pd.read_excel(people_file, dtype=str))
         spaces = pd.concat([spaces, occupant_profile(spaces, people)], axis=1)
         ds = Dataset(spaces, people, _quality_report(spaces, people))
     log.info("data quality " + " ".join(f"{k}={v}" for k, v in ds.report.items()))
+    if not write_cache:
+        return ds
     DATA_DIR.mkdir(exist_ok=True)
     with cache.open("wb") as fh:
         pickle.dump({"stamp": stamp, "ds": ds}, fh)

@@ -31,6 +31,7 @@ from html import unescape
 from typing import Protocol
 
 from app.config import ENV_FILE  # noqa: F401  importing config loads .env before os.environ is read
+from app.integrations.triage import build_graph, keyword_verdict, rule_verdict
 from app.logging_setup import get_logger, kv
 
 log = get_logger("integrations.email")
@@ -183,12 +184,10 @@ class ImapSource:
 
 # ------------------------------------------------------------------------------ intake
 def is_outage_related(m: InboundEmail) -> tuple[bool, str]:
-    """Rule-based triage (a learned classifier is a planned replacement; see README)."""
-    if TRIRIGA_SENDER.search(m.sender) or "Outage Request ID" in m.body[:4000]:
-        return True, "TRIRIGA notice"
-    if OUTAGE_SUBJECT.search(m.subject):
-        return True, "outage keywords in subject"
-    return False, "no outage indicators in sender or subject"
+    """Rule-only triage (TRIRIGA notice or outage keywords in the subject). The triage agent uses this when no
+    local model is available; see app/integrations/triage.py."""
+    v = rule_verdict(m.sender, m.subject, m.body) or keyword_verdict(m.subject)
+    return v["label"] == "outage", v["reason"]
 
 
 def thread_key(m: InboundEmail) -> str:
@@ -198,8 +197,13 @@ def thread_key(m: InboundEmail) -> str:
     return "subj:" + re.sub(r"\s+", " ", SUBJECT_NOISE.sub("", m.subject)).strip().lower()[:120]
 
 
+HEADER_LINES = 4          # InboundEmail.as_notice_text() puts From/Subject/Date/To before the body
+
+
 class EmailIntake:
-    def __init__(self, source: EmailSource, coord, store) -> None:
+    """Fetch -> triage agent (rules, local model, James) -> open/update an outage case, ignore, or hold for review."""
+
+    def __init__(self, source: EmailSource, coord, store, classifier_factory=None) -> None:
         self.source, self.coord, self.store = source, coord, store
         self._lock = threading.Lock()
         self.last_poll: str | None = None
@@ -207,70 +211,137 @@ class EmailIntake:
             CREATE TABLE IF NOT EXISTS inbox (message_id TEXT PRIMARY KEY, received TEXT, sent TEXT, sender TEXT,
                 subject TEXT, relevant INTEGER, reason TEXT, thread_key TEXT, body TEXT, case_id TEXT, action TEXT);
         """)
+        cols = {r[1] for r in store.db.execute("PRAGMA table_info(inbox)").fetchall()}
+        for col, kind in (("decided_by", "TEXT"), ("confidence", "REAL")):
+            if col not in cols:                                   # older databases: add the triage columns
+                store.db.execute(f"ALTER TABLE inbox ADD COLUMN {col} {kind}")
+        store.db.commit()
+        self.graph = build_graph(classifier_factory or (lambda: None), actions=self)
 
     def _seen(self, mid: str) -> bool:
         return self.store.db.execute("SELECT 1 FROM inbox WHERE message_id=?", (mid,)).fetchone() is not None
 
-    def _record(self, m: InboundEmail, relevant: bool, reason: str, key: str | None, case_id: str | None, action: str) -> None:
+    def _record(self, m: InboundEmail, relevant: bool, verdict: dict, key: str | None, case_id: str | None,
+                action: str, keep_body: bool) -> None:
         with self.store._lock:
-            self.store.db.execute("INSERT INTO inbox VALUES (?,?,?,?,?,?,?,?,?,?,?)", (
-                m.message_id, datetime.now().isoformat(timespec="seconds"), m.date.isoformat() if m.date else None,
-                m.sender, m.subject, int(relevant), reason, key, m.as_notice_text() if relevant else None, case_id, action))
+            self.store.db.execute(
+                "INSERT OR REPLACE INTO inbox (message_id, received, sent, sender, subject, relevant, reason, thread_key, body, "
+                "case_id, action, decided_by, confidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (
+                    m.message_id, datetime.now().isoformat(timespec="seconds"), m.date.isoformat() if m.date else None,
+                    m.sender, m.subject, int(relevant), verdict.get("reason", ""), key,
+                    m.as_notice_text() if keep_body else None, case_id, action, verdict.get("by"), verdict.get("confidence")))
             self.store.db.commit()
 
     def _open_case_for(self, key: str) -> str | None:
         row = self.store.db.execute("SELECT case_id FROM inbox WHERE thread_key=? AND case_id IS NOT NULL LIMIT 1", (key,)).fetchone()
         return row[0] if row else None
 
+    # ---------------------------------------------------------------- polling
     def poll(self, limit: int = 10) -> dict:
-        from app.agents.schemas import OutageRequest
         with self._lock:
             fetched = self.source.fetch(limit)
-            summary = {"fetched": len(fetched), "duplicates": 0, "ignored": 0, "cases_opened": [], "cases_updated": []}
+            summary = {"fetched": len(fetched), "duplicates": 0, "ignored": 0, "held": 0, "cases_opened": [], "cases_updated": []}
             for m in fetched:
                 if self._seen(m.message_id):
                     summary["duplicates"] += 1
                     continue
-                relevant, reason = is_outage_related(m)
-                if not relevant:
-                    self._record(m, False, reason, None, None, "ignored")
-                    summary["ignored"] += 1
-                    continue
-                key = thread_key(m)
-                existing = self._open_case_for(key)
-                self._record(m, True, reason, key, existing, "pending")
+                out = self.graph.invoke({"email": m, "known_case": self._open_case_for(thread_key(m))})["outcome"]
+                self._tally(summary, out)
+            self.last_poll = datetime.now().isoformat(timespec="seconds")
+        log.info("email poll " + kv(mode=self.source.mode, fetched=summary["fetched"], ignored=summary["ignored"],
+                                     held=summary["held"], opened=len(summary["cases_opened"]),
+                                     updated=len(summary["cases_updated"])))
+        return summary
+
+    @staticmethod
+    def _tally(summary: dict, out: dict) -> None:
+        if out["action"] == "ignored":
+            summary["ignored"] += 1
+        elif out["action"] == "held":
+            summary["held"] += 1
+        elif out["action"] == "opened":
+            summary["cases_opened"].append(out["case_id"])
+        elif out["action"] == "updated":
+            summary["cases_updated"].append(out["case_id"])
+
+    def decide(self, message_id: str, label: str, actor: str) -> dict:
+        """James's decision on a held email: the triage graph runs again with his label."""
+        if label not in ("outage", "not_outage"):
+            raise ValueError("label must be outage or not_outage")
+        with self._lock:
+            row = self.store.db.execute("SELECT * FROM inbox WHERE message_id=?", (message_id,)).fetchone()
+            if not row or row["action"] != "needs review":
+                raise KeyError(message_id)
+            text = row["body"] or ""
+            m = InboundEmail(row["message_id"], row["sender"], row["subject"],
+                             datetime.fromisoformat(row["sent"]) if row["sent"] else None,
+                             "\n".join(text.split("\n")[HEADER_LINES:]))
+            out = self.graph.invoke({"email": m, "human": label, "known_case": self._open_case_for(thread_key(m))})["outcome"]
+        self.store.audit(actor, "email_triaged", out.get("case_id"), f"{m.subject} · {label.replace('_', ' ')}")
+        return out
+
+    # ---------------------------------------------------------------- actions (called by the triage graph)
+    def ignore(self, m: InboundEmail, verdict: dict) -> dict:
+        self._record(m, False, verdict, None, None, "ignored", keep_body=False)     # privacy: no body kept
+        return {"action": "ignored"}
+
+    def hold(self, m: InboundEmail, verdict: dict) -> dict:
+        self._record(m, False, verdict, thread_key(m), None, "needs review", keep_body=True)
+        log.info("email held for review " + kv(subject=repr(m.subject[:80]), reason=repr(verdict.get("reason", "")[:80])))
+        return {"action": "held"}
+
+    def open_or_update(self, m: InboundEmail, verdict: dict) -> dict:
+        with self.store.outage_lock:              # same rule as cases opened in the app: one case per request
+            return self._open_or_update(m, verdict)
+
+    def _open_or_update(self, m: InboundEmail, verdict: dict) -> dict:
+        from app.agents.schemas import OutageRequest
+        key = thread_key(m)
+        existing = self._open_case_for(key)
+        if not existing and key.startswith("SR-"):          # a case James opened by hand for the same request
+            known = self.store.find_outage(reference=key)
+            existing = known["id"] if known else None
+        self._record(m, True, verdict, key, existing, "pending", keep_body=True)
+        bodies = [r[0] for r in self.store.db.execute(
+            "SELECT body FROM inbox WHERE thread_key=? AND relevant=1 ORDER BY sent", (key,)).fetchall()]
+        text = "\n".join(bodies)
+        try:
+            out = self.coord.run_outage(OutageRequest(text=text, source=f"email · {m.subject}"[:200]))
+        except Exception as exc:
+            log.error(f"intake failed message={m.message_id} error={exc!r}")
+            self._set_action(m.message_id, None, f"error: {type(exc).__name__}")
+            return {"action": "error"}
+        if not existing:
+            merged = self._related_informal_case(m, key, out)
+            if merged:                 # informal heads-up + later TRIRIGA notice = one incident
+                existing = merged
                 bodies = [r[0] for r in self.store.db.execute(
                     "SELECT body FROM inbox WHERE thread_key=? AND relevant=1 ORDER BY sent", (key,)).fetchall()]
                 text = "\n".join(bodies)
-                try:
-                    out = self.coord.run_outage(OutageRequest(text=text, source=f"email · {m.subject}"[:200]))
-                except Exception as exc:
-                    log.error(f"intake failed message={m.message_id} error={exc!r}")
-                    self._set_action(m.message_id, None, f"error: {type(exc).__name__}")
-                    continue
-                if not existing:
-                    merged = self._related_informal_case(m, key, out)
-                    if merged:                 # informal heads-up + later TRIRIGA notice = one incident
-                        existing = merged
-                        bodies = [r[0] for r in self.store.db.execute(
-                            "SELECT body FROM inbox WHERE thread_key=? AND relevant=1 ORDER BY sent", (key,)).fetchall()]
-                        text = "\n".join(bodies)
-                        out = self.coord.run_outage(OutageRequest(text=text, source=f"email · {m.subject}"[:200]))
-                inp = {"source": "email", "thread_key": key, "messages": len(bodies), "text": text if len(text) < 20000 else None}
-                if existing:
-                    case = self.store.rerun(existing, inp, out)
-                    self.store.audit("email_intake", "case_updated_by_email", existing, f"{m.subject} · Rev {case['rev_letter']}")
-                    self._set_action(m.message_id, existing, f"updated Rev {case['rev_letter']}")
-                    summary["cases_updated"].append(existing)
-                else:
-                    case = self.store.create("outage", None, inp, out)
-                    self.store.audit("email_intake", "case_opened_by_email", case["id"], m.subject)
-                    self._set_action(m.message_id, case["id"], "opened case")
-                    summary["cases_opened"].append(case["id"])
-            self.last_poll = datetime.now().isoformat(timespec="seconds")
-        log.info("email poll " + kv(mode=self.source.mode, fetched=summary["fetched"], ignored=summary["ignored"],
-                                     opened=len(summary["cases_opened"]), updated=len(summary["cases_updated"])))
-        return summary
+                out = self.coord.run_outage(OutageRequest(text=text, source=f"email · {m.subject}"[:200]))
+        inp = {"source": "email", "thread_key": key, "messages": len(bodies), "text": text if len(text) < 20000 else None}
+        if existing:
+            case = self.store.rerun(existing, inp, out)
+            self.store.audit("email_intake", "case_updated_by_email", existing, f"{m.subject} · Rev {case['rev_letter']}")
+            self._set_action(m.message_id, existing, f"updated Rev {case['rev_letter']}")
+            return {"action": "updated", "case_id": existing}
+        case = self.store.create("outage", None, inp, out)
+        self.store.audit("email_intake", "case_opened_by_email", case["id"], m.subject)
+        self._set_action(m.message_id, case["id"], "opened case")
+        self._follow_case(key, case["id"])
+        return {"action": "opened", "case_id": case["id"]}
+
+    def _follow_case(self, key: str, case_id: str) -> None:
+        """Emails held for review in a thread that now has a case are filed with it (same rule as later replies)."""
+        held = self.store.db.execute("SELECT * FROM inbox WHERE thread_key=? AND action='needs review' ORDER BY sent",
+                                     (key,)).fetchall()
+        for row in held:
+            text = row["body"] or ""
+            m = InboundEmail(row["message_id"], row["sender"], row["subject"],
+                             datetime.fromisoformat(row["sent"]) if row["sent"] else None,
+                             "\n".join(text.split("\n")[HEADER_LINES:]))
+            self.graph.invoke({"email": m, "known_case": case_id})
+            log.info("held email filed with its thread's case " + kv(case=case_id, subject=repr(m.subject[:60])))
 
     def _related_informal_case(self, m: InboundEmail, key: str, out: dict) -> str | None:
         """For a new SR thread, find a case opened by informal email in the previous 14 days that covers
@@ -299,16 +370,23 @@ class EmailIntake:
             self.store.db.commit()
 
     def status(self, limit: int = 40) -> dict:
-        rows = self.store.db.execute("SELECT message_id, received, sent, sender, subject, relevant, reason, thread_key, case_id, action "
-                                     "FROM inbox ORDER BY sent DESC LIMIT ?", (limit,)).fetchall()
-        counts = self.store.db.execute("SELECT COUNT(*), SUM(relevant) FROM inbox").fetchone()
+        rows = self.store.db.execute(
+            "SELECT message_id, received, sent, sender, subject, relevant, reason, thread_key, case_id, action, decided_by, "
+            "confidence FROM inbox ORDER BY (action = 'needs review') DESC, sent DESC LIMIT ?", (limit,)).fetchall()
+        counts = self.store.db.execute("SELECT COUNT(*), SUM(relevant), SUM(action = 'needs review') FROM inbox").fetchone()
         return {"source": self.source.health_check(), "last_poll": self.last_poll,
-                "processed": counts[0] or 0, "relevant": counts[1] or 0, "items": [dict(r) for r in rows]}
+                "processed": counts[0] or 0, "relevant": counts[1] or 0, "needs_review": counts[2] or 0,
+                "items": [dict(r) for r in rows]}
 
 
-def build_source(corpus) -> EmailSource:
-    """FAI_EMAIL_SOURCE=imap uses the live mailbox; anything else replays the supplied threads."""
-    if os.environ.get("FAI_EMAIL_SOURCE", "replay").lower() == "imap":
+def build_source(corpus, graph_auth=None) -> EmailSource:
+    """FAI_EMAIL_SOURCE: graph = Microsoft 365 (read-only, delta sync), imap = a mailbox over IMAP (read-only),
+    anything else replays the supplied threads."""
+    kind = os.environ.get("FAI_EMAIL_SOURCE", "replay").lower()
+    if kind == "graph":
+        from app.integrations.msgraph import GraphAuth, GraphMailSource
+        return GraphMailSource(graph_auth or GraphAuth())
+    if kind == "imap":
         return ImapSource()
     since = os.environ.get("FAI_REPLAY_SINCE", "2026-10-01")
     return ReplaySource(corpus, datetime.fromisoformat(since) if since else None)

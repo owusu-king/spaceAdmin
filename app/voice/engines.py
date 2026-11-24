@@ -10,6 +10,7 @@ Only models found here are offered in Settings, so the user can only pick what i
 from __future__ import annotations
 
 import json
+import os
 import threading
 from functools import lru_cache
 
@@ -46,7 +47,7 @@ def tts_voices() -> list[dict]:
     if not (KOKORO_MODEL.exists() and KOKORO_VOICES.exists()):
         return []
     out = []
-    for v in sorted(_kokoro().get_voices()):
+    for v in _voice_names(KOKORO_VOICES.stat().st_mtime):
         prefix, _, name = v.partition("_")
         if len(prefix) == 2 and prefix[0] in _ACCENT and prefix[1] in _GENDER:
             out.append({"id": v, "label": f"{name.title()} ({_ACCENT[prefix[0]]}, {_GENDER[prefix[1]]})",
@@ -54,16 +55,39 @@ def tts_voices() -> list[dict]:
     return out
 
 
+@lru_cache(maxsize=2)
+def _voice_names(_mtime: float) -> list[str]:
+    """Voice names from the voices archive's table of contents: no need to load the speech model (which takes seconds)."""
+    import zipfile
+    with zipfile.ZipFile(KOKORO_VOICES) as z:
+        return sorted(n.removesuffix(".npy") for n in z.namelist())
+
+
 def vad_ready() -> bool:
     return (VAD_DIR / "silero_vad.onnx").exists()
 
 
 # ------------------------------------------------------------------------------ loaders
+def session_options():
+    """CPU settings for the speech models. ONNX Runtime's default uses every core and keeps its threads spinning
+    between calls; on this 24-core laptop that burned ~25 cores during speech and starved the browser (5x the CPU
+    time for no gain). A fixed pool without spinning is faster and leaves the machine responsive."""
+    import onnxruntime as ort
+    o = ort.SessionOptions()
+    o.intra_op_num_threads = max(2, min(16, (os.cpu_count() or 8) // 2))
+    o.inter_op_num_threads = 1
+    o.add_session_config_entry("session.intra_op.allow_spinning", "0")
+    o.add_session_config_entry("session.inter_op.allow_spinning", "0")
+    return o
+
+
 @lru_cache(maxsize=1)
 def _kokoro():
+    import onnxruntime as ort
     from kokoro_onnx import Kokoro
     with timed(log, "tts model loaded", model="kokoro-v1.0"):
-        return Kokoro(str(KOKORO_MODEL), str(KOKORO_VOICES))
+        sess = ort.InferenceSession(str(KOKORO_MODEL), session_options(), providers=["CPUExecutionProvider"])
+        return Kokoro.from_session(sess, str(KOKORO_VOICES))
 
 
 @lru_cache(maxsize=2)
@@ -73,7 +97,8 @@ def _stt(model_id: str):
     if not m:
         raise FileNotFoundError(f"Speech model '{model_id}' is not installed in {STT_DIR}")
     with timed(log, "stt model loaded", model=model_id):
-        return onnx_asr.load_model(m["model_type"], STT_DIR / model_id, quantization="int8" if m["int8"] else None)
+        return onnx_asr.load_model(m["model_type"], STT_DIR / model_id, quantization="int8" if m["int8"] else None,
+                                   sess_options=session_options())
 
 
 class Transcriber:

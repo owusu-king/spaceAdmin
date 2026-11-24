@@ -2,8 +2,7 @@ import { api, chip, errorBanner, esc, fmtDate, fmtNum, icon, skeleton } from "..
 import { setCrumbs } from "../app.js";
 import { newSpaceRequest } from "./spaces.js";
 
-// Overview: key figures → what needs James now (review queue + what's coming) → the state of the
-// space portfolio. Every element navigates; nothing opens a dialog.
+// Overview: key figures, what needs James now, and the state of the space portfolio.
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const localDate = s => new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00` : s);
@@ -23,14 +22,14 @@ export async function render(main) {
   const onRecord = horizon.filter(x => x.kind !== "predicted").length;
   const estimates = horizon.length - onRecord;
   const now = new Date(d.as_of);
-  main.querySelector("#asof").textContent = `${DAY[now.getDay()]}, ${fmtDate(d.as_of)} · Natural Sciences facilities`;
+  main.querySelector("#asof").textContent = `${DAY[now.getDay()]}, ${fmtDate(d.as_of)}`;
 
   main.querySelector("#body").innerHTML = `
     <div class="ov-kpis">
-      ${kpi("#/cases", "Awaiting your review", k.awaiting_review, review.filter(c => c.status === "NeedsRevision").length ? `${review.filter(c => c.status === "NeedsRevision").length} returned` : "Cases ready to approve", true)}
-      ${kpi("#/outages", "Outages · next 45 days", onRecord, estimates ? `+ ${estimates} recurring estimate${estimates === 1 ? "" : "s"}` : "On record")}
-      ${kpi("#/spaces?view=vacant&scope=ns", "Recorded vacancies", k.ns_recorded_vacancies, "Vacant or under capacity")}
-      ${kpi("#/spaces?view=flagged", "Records to verify", fmtNum(k.flagged_records), "Model disagrees with the record")}
+      ${kpi("#/cases", "To review", k.awaiting_review, review.filter(c => c.status === "NeedsRevision").length ? `${review.filter(c => c.status === "NeedsRevision").length} returned` : "Cases", true)}
+      ${kpi("#/outages", "Outages · next 45 days", onRecord, estimates ? `+ ${estimates} estimated` : "Scheduled")}
+      ${kpi("#/spaces?view=vacant&scope=ns", "Vacancies", k.ns_recorded_vacancies, "Vacant or under capacity")}
+      ${kpi("#/spaces?view=flagged", "Records to verify", fmtNum(k.flagged_records), "Model disagrees")}
     </div>
 
     <div class="ov-grid">
@@ -61,7 +60,7 @@ export async function render(main) {
         <div class="pad">${seating(d.seating)}</div>
       </a>
       <a class="panel-card link-card" href="#/spaces?view=flagged">
-        <header><h2>Where the model disagrees</h2>${icon("chev", "chev")}</header>
+        <header><h2>Model disagreements</h2>${icon("chev", "chev")}</header>
         <div class="pad">${disagreements(d.flag_pairs, d.flagged_total)}</div>
       </a>
     </div>`;
@@ -79,11 +78,10 @@ const SEATS = [["Over Capacity", "Over capacity", "var(--navy-900)"], ["At Capac
 function seating(counts) {
   const rows = SEATS.map(([key, label, color]) => ({ label, color, n: counts[key] || 0 }));
   const total = rows.reduce((a, r) => a + r.n, 0) || 1;
-  const other = counts["Not Available for Seating"] || 0;
   return `<div class="stack-bar" role="img" aria-label="${rows.map(r => `${r.label} ${r.n}`).join(", ")}">
       ${rows.filter(r => r.n).map(r => `<i style="flex:${r.n};background:${r.color}" title="${r.label}: ${r.n}"></i>`).join("")}</div>
     <ul class="stack-legend">${rows.map(r => `<li><i style="background:${r.color}"></i><span>${r.label}</span><b>${fmtNum(r.n)}</b><span class="muted">${Math.round(r.n / total * 100)}%</span></li>`).join("")}</ul>
-    <p class="foot-note">${fmtNum(total)} workpoint rooms · ${fmtNum(other)} rooms are not seating (labs, storage, support)</p>`;
+    <p class="foot-note">${fmtNum(total)} workpoint rooms</p>`;
 }
 
 function disagreements(pairs, total) {
@@ -91,5 +89,5 @@ function disagreements(pairs, total) {
   const max = pairs[0].n;
   return `<ul class="pairs">${pairs.map(p => `<li><span class="pr-l">${esc(p.recorded)} <span class="muted">→</span> ${esc(p.predicted)}</span>
       <span class="pr-bar"><i style="width:${(p.n / max) * 100}%"></i></span><b>${p.n}</b></li>`).join("")}</ul>
-    <p class="foot-note">Recorded type → what the model sees · top 5 of ${fmtNum(total)} flagged records</p>`;
+    <p class="foot-note">Recorded → predicted · top 5 of ${fmtNum(total)}</p>`;
 }

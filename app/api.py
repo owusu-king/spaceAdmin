@@ -9,6 +9,8 @@ import csv
 import io
 import json
 import os
+import threading
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -25,11 +27,14 @@ from pydantic import BaseModel, Field, ValidationError
 from app.agents.base import LOCKED_ACTIONS
 from app.agents.coordinator import Coordinator, build_system
 from app.agents.schemas import OutageRequest, SpaceRequest
-from app.config import BUILDINGS, DATA_DIR, MODEL_DIR, NATURAL_SCIENCES_DEPARTMENTS, WEB_DIR
+from app.config import BUILDINGS, DATA_DIR, EVENTS_DB_PATH, MODEL_DIR, NATURAL_SCIENCES_DEPARTMENTS, WEB_DIR
 from app.data.buildings import floor_plan_files
 from app.data.notices import rtf_file_text
 from app.integrations.email import EmailIntake, build_source
 from app.integrations.mailer import SmtpMailer
+from app.data.records import RecordsPipeline, UploadSource, build_records_source, records_config
+from app.integrations.msgraph import GraphAuth, GraphError
+from app.integrations.triage import ModelClassifier
 from app.logging_setup import get_logger, run_context
 from app.scenarios import message_text, outage_sources, resolve_payload, scenarios
 from app.services.cases import CaseStore, dumps
@@ -37,6 +42,7 @@ from app.services.events import EventStore
 from app.services.outbox import Outbox, SendRefused
 from app.services.scheduling import forecast_backtest, recurring_maintenance_forecast
 from app.services.settings import AUTO_OFF_MINUTES, SettingsStore, unlock_allowed
+from app.voice.llm import OllamaChat
 from app.voice.service import CHOICES, VoiceService
 
 REVIEWER_NAME = "James Delgado (Facilities Administrator)"
@@ -56,11 +62,16 @@ def store() -> CaseStore:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     _startup()
-    interval = int(os.environ.get("FAI_EMAIL_POLL_SECONDS", "0") or 0)
+    # Live intake: with Microsoft 365 the mailbox is checked every minute unless FAI_EMAIL_POLL_SECONDS says otherwise.
+    default = "60" if os.environ.get("FAI_EMAIL_SOURCE", "").lower() == "graph" else "0"
+    interval = int(os.environ.get("FAI_EMAIL_POLL_SECONDS") or default)
+    STATE["poll_seconds"] = interval
     task = asyncio.create_task(_poll_forever(interval)) if interval > 0 else None
+    rtask = asyncio.create_task(_records_scheduler())
     yield
-    if task:
-        task.cancel()
+    for t in (task, rtask):
+        if t:
+            t.cancel()
 
 
 async def _poll_forever(interval: int) -> None:
@@ -73,21 +84,69 @@ async def _poll_forever(interval: int) -> None:
             log.error(f"background email poll failed error={exc!r}")
 
 
+async def _records_scheduler() -> None:
+    """Checks the records source on the schedule chosen in Settings (or FAI_RECORDS_REFRESH_MINUTES). The setting is
+    read every minute, so a change takes effect without a restart. Uploads are never checked automatically."""
+    last = time.monotonic()
+    while True:
+        await asyncio.sleep(60)
+        cfg = records_config(STATE.get("settings"))
+        if cfg["source"] == "upload" or cfg["refresh_minutes"] <= 0 or time.monotonic() - last < cfg["refresh_minutes"] * 60:
+            continue
+        last = time.monotonic()
+        try:
+            await run_in_threadpool(STATE["records"].refresh)
+        except Exception as exc:
+            log.error(f"scheduled records refresh failed error={exc!r}")
+
+
+_SWAP = threading.Lock()
+
+
+def _use_dataset(ds) -> dict:
+    """Switch the running app to new records: rebuild the agents around them and swap atomically. Cases, events,
+    settings and the email inbox are untouched; open voice conversations finish on the previous data."""
+    with _SWAP, run_context("records"):
+        new = build_system(events=STATE["events"], ds=ds)
+        STATE["coord"] = new
+        STATE["intake"].coord = new
+        STATE["voice"].coord, STATE["voice"]._conv = new, None
+        store().audit("system", "records_updated", detail=f"{len(ds.spaces)} spaces · {len(ds.people)} people")
+        log.info("app switched to new records")
+        return {"without_model_history": new.predictor.without_oof}
+
+
 def _startup() -> None:
     with run_context("boot"):
         log.info("application starting")
-        STATE["events"] = EventStore(DATA_DIR / "events.db")
+        STATE["events"] = EventStore(EVENTS_DB_PATH)
         STATE["coord"] = build_system(events=STATE["events"])
         STATE["store"] = CaseStore()
         STATE["plans"] = {(p["code"], p["floor"]): p for p in floor_plan_files()}
-        STATE["intake"] = EmailIntake(build_source(coord().corpus), coord(), store())
+        STATE["graph"] = GraphAuth()
+        STATE["intake"] = EmailIntake(build_source(coord().corpus, STATE["graph"]), coord(), store(),
+                                      classifier_factory=triage_classifier)
         STATE["mailer"] = SmtpMailer()
         attach_switches(store())
+        STATE["records"] = RecordsPipeline(build_records_source(STATE["graph"], STATE["settings"]), lambda: coord().ds, _use_dataset)
         if STATE["settings"].is_on("voice_assistant"):
             STATE["voice"].prewarm()
         log.info(f"email intake ready mode={STATE['intake'].source.mode}")
         store().audit("system", "application_started", detail="data, model and agents loaded")
         log.info("application ready url=http://localhost:8000")
+
+
+_TRIAGE = {"at": -1e9, "clf": None}
+
+
+def triage_classifier():
+    """The local model for email triage (the language model chosen in Settings); None when Ollama has no
+    suitable model, in which case triage falls back to the keyword rule. Re-checked at most once a minute."""
+    now = time.monotonic()
+    if now - _TRIAGE["at"] > 60:
+        model = STATE["voice"].selection()["voice_llm"] if "voice" in STATE else None
+        _TRIAGE.update(at=now, clf=ModelClassifier(OllamaChat(model)) if model else None)
+    return _TRIAGE["clf"]
 
 
 def attach_switches(case_store: CaseStore) -> None:
@@ -310,15 +369,47 @@ def _run(kind: str, inp: dict) -> tuple[dict, dict]:
         raise HTTPException(422, e.errors(include_url=False, include_context=False))
 
 
+def _known_outage_case(inp: dict) -> dict | None:
+    """Before running the agent: is this notice (or its request number) already a case?"""
+    source = {k: inp[k] for k in ("message_id", "thread", "scenario") if k in inp}
+    reference = None
+    if "message_id" in inp:
+        msgs = coord().corpus.messages
+        i = int(inp["message_id"]) if str(inp["message_id"]).lstrip("-").isdigit() else -1
+        if 0 <= i < len(msgs) and len(msgs[i].sr_ids) == 1:
+            reference = msgs[i].sr_ids[0]
+    return store().find_outage(reference=reference) or (store().find_outage(source=source) if source else None)
+
+
 @app.post("/api/v1/cases")
 def create_case(body: CaseIn):
-    inp, out = _run(body.kind, body.input)
-    return _json(store().create(body.kind, None, inp, out))
+    """Run the agent and open a case. An outage request that already has a case gets that case back
+    (existing: true) instead of a duplicate; re-running the existing case makes a new revision."""
+    with store().outage_lock:             # one case per request, even with double clicks or the email poll
+        if body.kind == "outage":
+            known = _known_outage_case(body.input)
+            if known:
+                return _json({**known, "existing": True})
+        inp, out = _run(body.kind, body.input)
+        if body.kind == "outage":
+            ref = (out.get("outage") or {}).get("request_reference")
+            known = store().find_outage(reference=ref) if ref else None
+            if known:
+                return _json({**known, "existing": True})
+        return _json(store().create(body.kind, None, inp, out))
 
 
 @app.get("/api/v1/cases")
 def list_cases():
     return _json(store().list())
+
+
+@app.delete("/api/v1/cases/{cid}")
+def delete_case(cid: str):
+    try:
+        return _json(store().delete(cid, REVIEWER_NAME))
+    except KeyError:
+        raise HTTPException(404, "Case not found")
 
 
 @app.get("/api/v1/cases/{cid}")
@@ -391,9 +482,18 @@ class SendIn(BaseModel):
     confirm: bool = False
 
 
+_SEND_LOCK = threading.Lock()
+
+
 @app.post("/api/v1/cases/{cid}/send")
 def send_draft(cid: str, body: SendIn):
-    """Send one approved draft. Needs the 'send_email' switch, an approved case and explicit confirmation."""
+    """Send one approved draft. Needs the 'send_email' switch, an approved case and explicit confirmation.
+    One send at a time, so a double click or a second tab can never deliver the same draft twice."""
+    with _SEND_LOCK:
+        return _send_draft(cid, body)
+
+
+def _send_draft(cid: str, body: SendIn):
     settings = STATE["settings"]
     if not settings.is_on("send_email"):
         store().audit(REVIEWER_NAME, "locked_action_attempt", cid, "send_email (switch off)")
@@ -445,6 +545,21 @@ def set_switch(key: str, body: SwitchIn):
 def voice_options():
     """Installed local models (only these can be chosen), the current choice and what is missing."""
     return _json({**STATE["voice"].options(), "enabled": STATE["settings"].is_on("voice_assistant")})
+
+
+@app.get("/api/v1/voice/status")
+def voice_status():
+    """Is the voice assistant switched on? Fast: decides whether the space request dialog offers a conversation."""
+    return {"enabled": STATE["settings"].switched_on("voice_assistant")}
+
+
+@app.post("/api/v1/voice/warm")
+def voice_warm():
+    """Called when the app opens: if voice is on, load the models in the background (rate-limited)."""
+    on = STATE["settings"].is_on("voice_assistant")
+    if on:
+        STATE["voice"].prewarm()
+    return {"warming": on}
 
 
 class VoiceChoiceIn(BaseModel):
@@ -524,7 +639,8 @@ def add_event(body: EventIn):
                                  "blocked" if body.kind == "blocked" else "manual", body.note)
     except ValueError as e:
         raise HTTPException(422, str(e))
-    store().audit(REVIEWER_NAME, "time_blocked" if body.kind == "blocked" else "event_added", detail=f"{body.title} · {body.start:%Y-%m-%d %H:%M}")
+    if not ev.get("duplicate"):
+        store().audit(REVIEWER_NAME, "time_blocked" if body.kind == "blocked" else "event_added", detail=f"{body.title} · {body.start:%Y-%m-%d %H:%M}")
     return _json(ev)
 
 
@@ -543,11 +659,11 @@ class IcsIn(BaseModel):
 @app.post("/api/v1/events/import")
 def import_events(body: IcsIn):
     try:
-        n = STATE["events"].import_ics(body.ics, coord().space.resolver)
+        res = STATE["events"].import_ics(body.ics, coord().space.resolver)
     except Exception as e:
         raise HTTPException(422, f"Could not read the calendar file: {e}")
-    store().audit(REVIEWER_NAME, "calendar_imported", detail=f"{n} events")
-    return {"imported": n}
+    store().audit(REVIEWER_NAME, "calendar_imported", detail=f"{res['imported']} events, {res['skipped']} already present")
+    return res
 
 
 class WindowIn(BaseModel):
@@ -572,6 +688,116 @@ def inbox():
     return _json(STATE["intake"].status())
 
 
+class TriageIn(BaseModel):
+    message_id: str = Field(..., max_length=500)
+    label: Literal["outage", "not_outage"]
+
+
+@app.post("/api/v1/inbox/triage")
+def triage_email(body: TriageIn):
+    """James decides an email the triage agent held for review; the triage graph then files it."""
+    try:
+        with run_context():
+            out = STATE["intake"].decide(body.message_id, body.label, REVIEWER_NAME)
+    except KeyError:
+        raise HTTPException(404, "No email waiting for review with that id")
+    return _json({**out, "status": STATE["intake"].status()})
+
+
+@app.get("/api/v1/inbox/evaluation")
+def triage_evaluation():
+    """Results of python -m app.triage_eval (keyword rule vs local model vs triage agent), if it has been run."""
+    f = DATA_DIR / "triage_eval.json"
+    return _json(json.loads(f.read_text(encoding="utf-8")) if f.exists() else None)
+
+
+# --------------------------------------------------------------------------- connections (live data)
+@app.get("/api/v1/connections")
+def connections():
+    src = STATE["intake"].source
+    return _json({"microsoft": STATE["graph"].status(),
+                  "email": {**src.health_check(), "mode": src.mode, "poll_seconds": STATE.get("poll_seconds", 0)},
+                  "records": {**STATE["records"].status(), "refresh_minutes": records_config(STATE["settings"])["refresh_minutes"]}})
+
+
+@app.post("/api/v1/connections/microsoft/connect")
+def microsoft_connect():
+    """Start Microsoft 365 sign-in: returns a code that James enters at the Microsoft page himself."""
+    try:
+        st = STATE["graph"].start_device_flow()
+    except GraphError as e:
+        raise HTTPException(409, str(e))
+    store().audit(REVIEWER_NAME, "microsoft_sign_in_started")
+    return _json(st)
+
+
+@app.post("/api/v1/connections/microsoft/disconnect")
+def microsoft_disconnect():
+    STATE["graph"].sign_out()
+    store().audit(REVIEWER_NAME, "microsoft_signed_out")
+    return connections()
+
+
+class RecordsConfigIn(BaseModel):
+    source: Literal["microsoft", "folder", "upload"]
+    dir: str | None = Field(None, max_length=500)
+    space_url: str | None = Field(None, max_length=2000)
+    people_url: str | None = Field(None, max_length=2000)
+    refresh_minutes: int = Field(0, ge=0, le=10080)
+
+
+@app.get("/api/v1/records/config")
+def get_records_config():
+    return {**records_config(STATE["settings"]), "microsoft_connected": STATE["graph"].status()["status"] == "connected"}
+
+
+@app.put("/api/v1/records/config")
+def set_records_config(body: RecordsConfigIn):
+    """James connects the records from the app: SharePoint/OneDrive links, a folder, or uploads."""
+    if body.source == "microsoft" and not (body.space_url and body.people_url):
+        raise HTTPException(422, "Paste the links to both reports")
+    if body.source == "folder" and not (body.dir and Path(body.dir).is_dir()):
+        raise HTTPException(422, "That folder does not exist on this computer")
+    s = STATE["settings"]
+    for key, val in (("records_source", body.source), ("records_dir", body.dir), ("records_space_url", body.space_url),
+                     ("records_people_url", body.people_url), ("records_refresh_minutes", str(body.refresh_minutes))):
+        if val is not None:
+            s.set_choice(key, val.strip() if isinstance(val, str) else val, REVIEWER_NAME)
+    STATE["records"].source = build_records_source(STATE["graph"], s)
+    return get_records_config()
+
+
+class UploadIn(BaseModel):
+    space_b64: str = Field(..., max_length=60_000_000)
+    people_b64: str = Field(..., max_length=60_000_000)
+
+
+@app.post("/api/v1/records/upload")
+def records_upload(body: UploadIn):
+    """Two Excel reports uploaded in the app: validated, compared and switched to like any other new version."""
+    import base64
+    try:
+        src = UploadSource(base64.b64decode(body.space_b64), base64.b64decode(body.people_b64))
+    except ValueError:
+        raise HTTPException(422, "The files could not be read")
+    res = STATE["records"].refresh(force=True, source=src)
+    if res.get("changed"):
+        STATE["settings"].set_choice("records_source", "upload", REVIEWER_NAME)
+        STATE["records"].source = build_records_source(STATE["graph"], STATE["settings"])
+        store().audit(REVIEWER_NAME, "records_uploaded")
+    return _json({**res, "status": STATE["records"].status()})
+
+
+@app.post("/api/v1/records/refresh")
+def records_refresh(force: bool = False):
+    """Check the records source now; take in a new version if there is one (validated first)."""
+    res = STATE["records"].refresh(force=force)
+    if res.get("changed"):
+        store().audit(REVIEWER_NAME, "records_refreshed", detail=json.dumps(
+            {k: {kk: vv for kk, vv in v.items() if kk != "examples"} for k, v in res["diff"].items() if k != "unchanged"}))
+    return _json({**res, "status": STATE["records"].status()})
+
+
 @app.post("/api/v1/inbox/poll")
 def poll_inbox(limit: int = Query(10, ge=1, le=100)):
     with run_context():
@@ -582,8 +808,8 @@ def poll_inbox(limit: int = Query(10, ge=1, le=100)):
 @app.post("/api/v1/actions/{action}")
 def locked_action(action: str):
     store().audit("user", "locked_action_attempt", detail=action)
-    hint = " Approved drafts can be sent from the case when 'Send email' is on in Settings." if action == "send_email" else ""
-    raise HTTPException(403, LOCKED_ACTIONS.get(action, "Action not available at integration Level 0.") + hint)
+    hint = " Turn on Send email in Settings." if action == "send_email" else ""
+    raise HTTPException(403, LOCKED_ACTIONS.get(action, "Not available.") + hint)
 
 
 # --------------------------------------------------------------------------- analysis views

@@ -109,6 +109,96 @@ def test_save_by_voice_and_never_approve(conv):
     assert st["intent"] == "approve_or_assign" and "stays with you" in st["reply"]
 
 
+def test_only_non_words_count_as_noise():
+    from app.voice.session import is_noise
+    assert all(is_noise(t) for t in ["", "Uh.", "hmm", "Mm-hmm.", "...", "Um, uh"[:3]])
+    assert not any(is_noise(t) for t in ["Yes.", "No.", "Yeah.", "Keck", "OK", "Find me an office in Keck"])
+
+
+def test_yes_after_the_save_offer_saves_and_is_never_an_approval(conv):
+    llm = ScriptedLLM({"Chemistry": {"intent": "space_request", "department": "Chemistry"},
+                       "Yes": {"intent": "approve_or_assign"}},                        # the model misreads "yes"
+                      reply="Room 300 is the best fit. Would you like me to save this as a case or refine the search?")
+    saved = []
+    conv.turn("g9", "Chemistry office please.", llm, spoken=True, save_case=lambda st: saved.append(1) or "SA-0001")
+    st = conv.turn("g9", "Yes.", llm, spoken=True, save_case=lambda st: saved.append(1) or "SA-0001")
+    assert st["intent"] == "save_case" and saved and "Saved as a case" in st["reply"]
+
+
+class _ScriptedVAD:
+    """Speech probability per frame from a script: 1 = speech, 0 = silence."""
+    frame = 512
+    def __init__(self, script): self.script = list(script)
+    def __call__(self, frame): return float(self.script.pop(0)) if self.script else 0.0
+
+
+def _session(vad):
+    from app.voice.session import VoiceSession
+    s = VoiceSession(None, None, lambda a: "", lambda t: b"", vad, lambda st: "")
+    s.events, s.turns = [], []
+    s._emit = s.events.append
+    s._start_turn = lambda audio=None, text=None: s.turns.append(len(audio))
+    return s
+
+
+def _feed(s, n):
+    import numpy as np
+    s._feed(np.zeros(512 * n, "<i2").tobytes())
+
+
+def test_a_noise_blip_does_not_interrupt_the_assistant():
+    s = _session(_ScriptedVAD([1] * 5 + [0] * 30))                                   # ~160 ms of "speech": a cough
+    s.client_playing = True                                                            # the assistant is talking
+    _feed(s, 35)
+    assert not any(isinstance(e, dict) and e.get("type") == "interrupt" for e in s.events) and not s.turns
+
+
+def test_real_speech_interrupts_the_assistant_and_is_kept_whole():
+    s = _session(_ScriptedVAD([1] * 20 + [0] * 30))                                   # ~650 ms of speech
+    s.client_playing = True
+    _feed(s, 50)
+    assert any(isinstance(e, dict) and e.get("type") == "interrupt" for e in s.events) and len(s.turns) == 1
+    assert s.turns[0] >= 20 * 512                                                      # captured from the start
+
+
+def test_speech_starts_as_quickly_as_before_when_the_assistant_is_quiet():
+    s = _session(_ScriptedVAD([1] * 10 + [0] * 30))                                   # ~320 ms of speech
+    _feed(s, 40)
+    assert len(s.turns) == 1 and not any(isinstance(e, dict) and e.get("type") == "interrupt" for e in s.events)
+
+
+def test_muted_microphone_means_text_only_replies():
+    import asyncio, json
+    from app.voice.session import VoiceSession
+    class Conv:
+        def turn(self, tid, text, llm, cancel, on_event, save_case=None, spoken=False):
+            on_event({"sentence": "Here is the answer."})
+            return {"reply": "Here is the answer.", "slots": {}, "intent": "small_talk"}
+    spoken = []
+    s = VoiceSession(Conv(), None, lambda a: "", lambda t: spoken.append(t) or b"\x00\x00", None, lambda st: "")
+    events = []
+    s._emit = events.append
+    s.loop = None
+    import threading as th
+    th.Thread(target=s._tts_worker, daemon=True).start()
+    async def go():
+        await s._control(json.dumps({"type": "mic_mute"}))
+        await s._control(json.dumps({"type": "text", "text": "Any office in Keck?"}))
+    asyncio.run(go())
+    time.sleep(0.5)
+    assert any(e.get("type") == "say" for e in events if isinstance(e, dict))         # the text still arrives
+    assert not spoken and not any(isinstance(e, bytes) for e in events)               # but nothing is spoken
+    s._tts_q.put(None)
+
+
+def test_warm_up_never_changes_the_model_load_options():
+    from app.voice.llm import OllamaChat
+    llm = OllamaChat("qwen3:8b")
+    warm = llm._body([], options={"num_predict": 1})["options"]
+    normal = llm._body([])["options"]
+    assert warm["num_ctx"] == normal["num_ctx"] and warm["num_predict"] == 1   # same context: no reload
+
+
 def test_interrupt_cancels_the_reply(conv):
     llm = ScriptedLLM({"Chemistry": {"intent": "space_request", "department": "Chemistry"}},
                       reply=" ".join(["word."] * 200))

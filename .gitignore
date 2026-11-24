@@ -16,3 +16,7 @@ data/events.db
 # local voice models (large binaries; download with the README voice setup)
 models/voice/
 data/test-facilities.db
+# Microsoft 365 sign-in token and sync state, records snapshots (personal data)
+data/graph_token.json
+data/graph_mail_state.json
+data/records/

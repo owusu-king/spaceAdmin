@@ -53,6 +53,12 @@ class SpacePredictor:
 
     def _summarize(self, spaces: pd.DataFrame, oof: pd.DataFrame) -> pd.DataFrame:
         proba = oof.reindex(spaces["space_id"])[self.classes]
+        # Rooms added after training (records pipeline) have no out-of-fold prediction: use the deployed model.
+        missing = proba.isna().any(axis=1).to_numpy()
+        self.without_oof = int(missing.sum())
+        if missing.any():
+            fill = self.predict_frame(spaces.loc[missing])
+            proba.iloc[missing.nonzero()[0]] = fill[self.classes].to_numpy()
         top = proba.to_numpy().argmax(1)
         t = pd.DataFrame(index=spaces["space_id"].values)
         t["recorded_group"] = spaces["class_group"].astype(str).values

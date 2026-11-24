@@ -30,7 +30,8 @@ def test_ics_import_resolves_buildings(system):
     ev = parse_ics(ICS)
     assert len(ev) == 2 and ev[1]["all_day"]
     store = EventStore()
-    assert store.import_ics(ICS, system.space.resolver) == 2
+    assert store.import_ics(ICS, system.space.resolver) == {"imported": 2, "skipped": 0}
+    assert store.import_ics(ICS, system.space.resolver) == {"imported": 0, "skipped": 2}      # importing again is safe
     hits = store.overlapping(["BRC"], datetime(2026, 12, 3, 10), datetime(2026, 12, 3, 12))
     assert [h["title"] for h in hits] == ["Chemistry Department Symposium"]
     assert store.overlapping(["Keck"], datetime(2026, 12, 4, 8), datetime(2026, 12, 4, 9))[0]["building"] is None   # campus-wide
